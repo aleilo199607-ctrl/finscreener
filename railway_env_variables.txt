@@ -1,0 +1,65 @@
+# Railway 环境变量配置
+# 在Railway项目页面的 "Variables" 标签页中添加以下变量
+
+# ======================
+# 必需配置
+# ======================
+
+# Tushare Pro API Token (必须配置)
+# 获取地址: https://tushare.pro
+TUSHARE_TOKEN=13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96
+
+# AI服务提供商 (选择一种)
+# 可选值: mock, deepseek, openai, glm, baidu
+# mock: 模拟AI响应 (测试用)
+# deepseek: 使用DeepSeek API (推荐)
+AI_PROVIDER=mock
+
+# ======================
+# 数据库和Redis (Railway自动配置)
+# ======================
+
+# 以下变量Railway会自动生成，无需手动配置
+# DATABASE_URL=自动生成
+# REDIS_URL=自动生成
+
+# ======================
+# AI服务配置 (如果需要使用真实AI)
+# ======================
+
+# DeepSeek配置 (如果AI_PROVIDER=deepseek)
+# DEEPSEEK_API_KEY=你的_DeepSeek_API_密钥
+# DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+# OpenAI配置 (如果AI_PROVIDER=openai)
+# OPENAI_API_KEY=你的_OpenAI_API_密钥
+# OPENAI_BASE_URL=https://api.openai.com/v1
+
+# ======================
+# 可选配置
+# ======================
+
+# 环境
+ENVIRONMENT=production
+
+# CORS允许的来源 (多个用逗号分隔)
+# 部署前端后更新这里的域名
+CORS_ORIGINS=https://finscreener.vercel.app,http://localhost:3000
+
+# 日志级别
+LOG_LEVEL=INFO
+
+# 缓存过期时间 (秒)
+CACHE_TTL=300
+
+# ======================
+# 部署说明
+# ======================
+
+1. 必须先配置 TUSHARE_TOKEN
+2. AI_PROVIDER 默认使用 mock (模拟AI响应)
+3. 如果想使用真实AI分析，请：
+   - 设置 AI_PROVIDER=deepseek (或其他提供商)
+   - 配置对应的API密钥
+4. CORS_ORIGINS 可以等前端部署后再更新
+5. Railway会自动配置数据库和Redis
