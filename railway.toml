@@ -1,0 +1,20 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r backend/requirements.txt"
+
+[deploy]
+startCommand = "cd backend && python -m uvicorn main:app --host 0.0.0.0 --port ${PORT}"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+
+[env]
+TUSHARE_TOKEN = "13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96"
+AI_PROVIDER = "mock"
+ENVIRONMENT = "production"
+CORS_ORIGINS = "https://finscreener.vercel.app,http://localhost:3000"
+LOG_LEVEL = "INFO"
+CACHE_TTL = "300"
+
+[plugins]
+postgresql = { version = "15" }
+redis = { version = "7" }

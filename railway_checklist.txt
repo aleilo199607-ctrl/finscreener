@@ -1,0 +1,46 @@
+Railway部署检查清单
+================================
+
+✅ 第一步：登录Railway
+[ ] 1. 访问 https://railway.app
+[ ] 2. 点击"Login with GitHub"
+[ ] 3. 授权Railway访问GitHub
+
+✅ 第二步：创建项目
+[ ] 4. 点击"+ New Project"
+[ ] 5. 选择"Deploy from GitHub repo"
+[ ] 6. 选择"aleilo199607-ctrl/finscreener"
+[ ] 7. 点击"Deploy"
+
+✅ 第三步：等待部署
+[ ] 8. 等待部署完成（2-3分钟）
+[ ] 9. 看到"Deployment successful!"
+
+✅ 第四步：配置环境变量
+[ ] 10. 点击"Variables"标签
+[ ] 11. 添加以下变量：
+
+复制以下所有内容：
+----------------------------------------
+TUSHARE_TOKEN=13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96
+AI_PROVIDER=mock
+ENVIRONMENT=production
+CORS_ORIGINS=https://finscreener.vercel.app,http://localhost:3000
+LOG_LEVEL=INFO
+CACHE_TTL=300
+----------------------------------------
+
+[ ] 12. 粘贴并保存
+
+✅ 第五步：获取后端URL
+[ ] 13. 点击"Settings"标签
+[ ] 14. 找到"Production Domain"
+[ ] 15. 复制URL（看起来像：https://finscreener-xxx.up.railway.app）
+
+✅ 第六步：验证
+[ ] 16. 访问：https://你的域名.railway.app/health
+[ ] 17. 应该显示：{"status": "healthy"}
+
+================================
+完成以上所有步骤后，告诉我你的后端URL！
+================================
