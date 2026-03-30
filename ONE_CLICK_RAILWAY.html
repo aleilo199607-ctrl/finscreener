@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinScreener Railway 一键部署</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-top: 40px;
+        }
+        h1 {
+            color: #2d3748;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+        }
+        .step {
+            background: #f7fafc;
+            border-left: 4px solid #4299e1;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .step h2 {
+            color: #2d3748;
+            margin-top: 0;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .button {
+            display: inline-block;
+            background: #4299e1;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4);
+        }
+        .button:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(66, 153, 225, 0.6);
+        }
+        .button-container {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .env-var {
+            background: #edf2f7;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .warning {
+            background: #fff5f5;
+            border-left: 4px solid #fc8181;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .success {
+            background: #f0fff4;
+            border-left: 4px solid #68d391;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ FinScreener Railway 一键部署</h1>
+        
+        <div class="success">
+            <strong>🎯 最简单的方法：</strong> 使用下面的Railway部署按钮
+        </div>
+        
+        <div class="button-container">
+            <a href="https://railway.app/new?template=python&env=TUSHARE_TOKEN%3D13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96%26AI_PROVIDER%3Dmock%26ENVIRONMENT%3Dproduction%26CORS_ORIGINS%3Dhttps%3A%2F%2Ffinscreener.vercel.app%2Chttp%3A%2F%2Flocalhost%3A3000%26LOG_LEVEL%3DINFO%26CACHE_TTL%3D300" 
+               target="_blank" class="button">
+               🚀 点击这里一键部署到Railway
+            </a>
+        </div>
+        
+        <div class="step">
+            <h2>📝 部署步骤说明</h2>
+            <ol>
+                <li><strong>点击上面的按钮</strong> - 会打开Railway部署页面</li>
+                <li><strong>登录GitHub</strong> - 授权Railway访问你的账户</li>
+                <li><strong>选择仓库</strong> - 选择 "aleilo199607-ctrl/finscreener"</li>
+                <li><strong>点击Deploy</strong> - Railway会自动开始部署</li>
+                <li><strong>等待完成</strong> - 大约需要2-3分钟</li>
+                <li><strong>复制URL</strong> - 部署完成后复制Production Domain</li>
+            </ol>
+        </div>
+        
+        <div class="step">
+            <h2>🔑 环境变量已预配置</h2>
+            <p>我已经在部署链接中预配置了所有必要的环境变量：</p>
+            <div class="env-var">TUSHARE_TOKEN=13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96</div>
+            <div class="env-var">AI_PROVIDER=mock</div>
+            <div class="env-var">ENVIRONMENT=production</div>
+            <div class="env-var">CORS_ORIGINS=https://finscreener.vercel.app,http://localhost:3000</div>
+            <div class="env-var">LOG_LEVEL=INFO</div>
+            <div class="env-var">CACHE_TTL=300</div>
+        </div>
+        
+        <div class="step">
+            <h2>🔧 部署后操作</h2>
+            <p>部署完成后，你需要：</p>
+            <ol>
+                <li>在Railway项目页面找到 <strong>Production Domain</strong></li>
+                <li>复制这个URL（格式类似：https://finscreener-xxxxx.up.railway.app）</li>
+                <li>保存这个URL，部署Vercel前端时需要</li>
+                <li>点击下面的按钮验证部署是否成功</li>
+            </ol>
+        </div>
+        
+        <div class="button-container">
+            <a href="#" onclick="testDeployment()" class="button" style="background: #38a169;">
+                ✅ 点击这里测试部署状态
+            </a>
+        </div>
+        
+        <div class="warning">
+            <strong>⚠️ 重要提醒：</strong>
+            <ul>
+                <li>确保你的GitHub仓库是公开的</li>
+                <li>部署过程中不要关闭浏览器</li>
+                <li>保存好Railway URL，后面会用到</li>
+                <li>如果部署失败，请刷新页面重试</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>FinScreener 智能股票筛选工具 | 版本 1.0.0</p>
+            <p>技术支持：皮卡丘 (Leo先生的专属AI助手)</p>
+        </div>
+    </div>
+    
+    <script>
+        function testDeployment() {
+            alert("部署完成后，请访问你的Railway项目页面获取URL，然后告诉我。\n\n我会帮你验证部署是否成功！");
+        }
+    </script>
+</body>
+</html>
