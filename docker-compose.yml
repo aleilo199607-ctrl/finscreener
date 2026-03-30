@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: finscreener-db
+    environment:
+      POSTGRES_DB: finscreener
+      POSTGRES_USER: finscreener
+      POSTGRES_PASSWORD: finscreener123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/data:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - finscreener-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finscreener"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: finscreener-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - finscreener-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: finscreener-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finscreener:finscreener123@postgres:5432/finscreener
+      REDIS_URL: redis://redis:6379/0
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-your_token_here}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEBUG: ${DEBUG:-false}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+    networks:
+      - finscreener-network
+    restart: unless-stopped
+
+  # 前端服务 (开发环境)
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: finscreener-frontend-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    networks:
+      - finscreener-network
+    stdin_open: true
+    tty: true
+
+  # Nginx 反向代理 (生产环境)
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: finscreener-nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - finscreener-network
+    restart: unless-stopped
+
+  # 监控服务 (可选)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: finscreener-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - finscreener-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  # Grafana 监控面板 (可选)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: finscreener-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - finscreener-network
+    restart: unless-stopped
+
+  # 数据库管理界面 (可选)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: finscreener-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@finscreener.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - finscreener-network
+    restart: unless-stopped
+
+  # Redis 管理界面 (可选)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: finscreener-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - finscreener-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  pgadmin_data:
+
+networks:
+  finscreener-network:
+    driver: bridge
