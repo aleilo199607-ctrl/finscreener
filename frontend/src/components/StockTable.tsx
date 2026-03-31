@@ -35,12 +35,12 @@ export const StockTable: React.FC<StockTableProps> = ({
   onViewDetail,
   className,
 }) => {
-  const [sortField, setSortField] = useState<string>('change_percent');
+  const [sortField, setSortField] = useState<string>('pct_chg');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const columns: Column[] = [
     {
-      key: 'symbol',
+      key: 'ts_code',
       title: '代码',
       align: 'left',
       sortable: true,
@@ -48,30 +48,13 @@ export const StockTable: React.FC<StockTableProps> = ({
       width: '80px',
       render: (stock) => (
         <div className="flex flex-col">
-          <span className="font-mono font-bold text-gray-900">{stock.symbol}</span>
-          <span className="text-xs text-gray-500">{stock.exchange}</span>
+          <span className="font-mono font-bold text-gray-900">{stock.ts_code?.split('.')[0]}</span>
+          <span className="text-xs text-gray-500">{stock.ts_code?.split('.')[1]}</span>
         </div>
       ),
     },
     {
-      key: 'name',
-      title: '名称',
-      align: 'left',
-      sortable: true,
-      width: '140px',
-      render: (stock) => (
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
-            <span className="text-xs font-bold text-blue-600">
-              {stock.name.charAt(0)}
-            </span>
-          </div>
-          <span className="font-medium text-gray-900 truncate">{stock.name}</span>
-        </div>
-      ),
-    },
-    {
-      key: 'latest_price',
+      key: 'close',
       title: '最新价',
       align: 'right',
       sortable: true,
@@ -80,16 +63,16 @@ export const StockTable: React.FC<StockTableProps> = ({
       render: (stock) => (
         <div className="text-right">
           <span className="text-lg font-bold text-gray-900">
-            ¥{stock.latest_price.toFixed(2)}
+            ¥{(stock.close || 0).toFixed(2)}
           </span>
           <div className="flex items-center justify-end gap-1 mt-1">
             <span className={cn(
               "text-xs font-medium",
-              stock.change_percent >= 0 ? "text-red-600" : "text-green-600"
+              (stock.pct_chg || 0) >= 0 ? "text-red-600" : "text-green-600"
             )}>
-              {stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%
+              {(stock.pct_chg || 0) >= 0 ? '+' : ''}{(stock.pct_chg || 0).toFixed(2)}%
             </span>
-            {stock.change_percent >= 0 ? (
+            {(stock.pct_chg || 0) >= 0 ? (
               <ArrowUpRight className="w-3 h-3 text-red-600" />
             ) : (
               <ArrowDownRight className="w-3 h-3 text-green-600" />
@@ -99,19 +82,19 @@ export const StockTable: React.FC<StockTableProps> = ({
       ),
     },
     {
-      key: 'change_percent',
+      key: 'pct_chg',
       title: '涨跌幅',
       align: 'right',
       sortable: true,
       icon: <Percent className="w-3 h-3" />,
       width: '100px',
       render: (stock) => {
-        const isPositive = stock.change_percent >= 0;
+        const isPositive = (stock.pct_chg || 0) >= 0;
         return (
           <div className={cn(
             "px-3 py-1.5 rounded-lg text-center",
-            isPositive 
-              ? "bg-red-50 text-red-700 border border-red-200" 
+            isPositive
+              ? "bg-red-50 text-red-700 border border-red-200"
               : "bg-green-50 text-green-700 border border-green-200"
           )}>
             <div className="flex items-center justify-center gap-1">
@@ -121,18 +104,18 @@ export const StockTable: React.FC<StockTableProps> = ({
                 <TrendingDown className="w-3 h-3" />
               )}
               <span className="font-bold">
-                {isPositive ? '+' : ''}{stock.change_percent.toFixed(2)}%
+                {isPositive ? '+' : ''}{(stock.pct_chg || 0).toFixed(2)}%
               </span>
             </div>
             <div className="text-xs mt-1">
-              {stock.change_amount >= 0 ? '+' : ''}{stock.change_amount.toFixed(2)}
+              {(stock.change || 0) >= 0 ? '+' : ''}{(stock.change || 0).toFixed(2)}
             </div>
           </div>
         );
       },
     },
     {
-      key: 'volume',
+      key: 'vol',
       title: '成交量',
       align: 'right',
       sortable: true,
@@ -141,27 +124,27 @@ export const StockTable: React.FC<StockTableProps> = ({
       render: (stock) => (
         <div className="text-right">
           <span className="text-sm font-medium text-gray-900">
-            {(stock.volume / 10000).toFixed(1)}万
+            {((stock.vol || 0) / 10000).toFixed(1)}万
           </span>
           <div className="mt-1">
             <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={cn(
                   "h-full",
-                  stock.volume_ratio >= 1 ? "bg-green-500" : "bg-yellow-500"
+                  (stock.volume_ratio || 0) >= 1 ? "bg-green-500" : "bg-yellow-500"
                 )}
-                style={{ width: `${Math.min(stock.volume_ratio * 20, 100)}%` }}
+                style={{ width: `${Math.min((stock.volume_ratio || 0) * 20, 100)}%` }}
               />
             </div>
             <span className="text-xs text-gray-500 mt-1 block">
-              量比: {stock.volume_ratio.toFixed(2)}
+              量比: {(stock.volume_ratio || 0).toFixed(2)}
             </span>
           </div>
         </div>
       ),
     },
     {
-      key: 'pe_ratio',
+      key: 'pe',
       title: 'PE',
       align: 'right',
       sortable: true,
@@ -171,18 +154,18 @@ export const StockTable: React.FC<StockTableProps> = ({
         <div className="text-right">
           <span className={cn(
             "text-sm font-bold",
-            stock.pe_ratio < 15 ? "text-green-700" :
-            stock.pe_ratio < 30 ? "text-yellow-700" :
+            (stock.pe || 0) < 15 ? "text-green-700" :
+            (stock.pe || 0) < 30 ? "text-yellow-700" :
             "text-red-700"
           )}>
-            {stock.pe_ratio.toFixed(1)}
+            {stock.pe ? stock.pe.toFixed(1) : '-'}
           </span>
           <div className="text-xs text-gray-500 mt-1">市盈率</div>
         </div>
       ),
     },
     {
-      key: 'pb_ratio',
+      key: 'pb',
       title: 'PB',
       align: 'right',
       sortable: true,
@@ -191,27 +174,28 @@ export const StockTable: React.FC<StockTableProps> = ({
         <div className="text-right">
           <span className={cn(
             "text-sm font-bold",
-            stock.pb_ratio < 1.5 ? "text-green-700" :
-            stock.pb_ratio < 3 ? "text-yellow-700" :
+            (stock.pb || 0) < 1.5 ? "text-green-700" :
+            (stock.pb || 0) < 3 ? "text-yellow-700" :
             "text-red-700"
           )}>
-            {stock.pb_ratio.toFixed(2)}
+            {stock.pb ? stock.pb.toFixed(2) : '-'}
           </span>
           <div className="text-xs text-gray-500 mt-1">市净率</div>
         </div>
       ),
     },
     {
-      key: 'market_cap',
+      key: 'total_mv',
       title: '市值',
       align: 'right',
       sortable: true,
       width: '120px',
       render: (stock) => {
-        const capInBillions = stock.market_cap / 100000000;
+        const mv = stock.total_mv || 0;
+        const capInBillions = mv / 10000; // total_mv单位是万元
         let displayText = '';
         let sizeColor = '';
-        
+
         if (capInBillions < 10) {
           displayText = `${capInBillions.toFixed(1)}亿`;
           sizeColor = 'text-blue-600';
@@ -222,15 +206,15 @@ export const StockTable: React.FC<StockTableProps> = ({
           displayText = `${(capInBillions / 100).toFixed(1)}千亿`;
           sizeColor = 'text-indigo-600';
         }
-        
+
         return (
           <div className="text-right">
             <span className={`text-sm font-bold ${sizeColor}`}>
-              {displayText}
+              {mv > 0 ? displayText : '-'}
             </span>
             <div className="text-xs text-gray-500 mt-1">
-              {stock.market_cap >= 50000000000 ? '大盘股' :
-               stock.market_cap >= 10000000000 ? '中盘股' : '小盘股'}
+              {capInBillions >= 200 ? '大盘股' :
+               capInBillions >= 50 ? '中盘股' : '小盘股'}
             </div>
           </div>
         );
@@ -245,21 +229,21 @@ export const StockTable: React.FC<StockTableProps> = ({
       render: (stock) => (
         <div className="flex items-center justify-center gap-2">
           <Link
-            to={`/stock/${stock.symbol}`}
+            to={`/stock/${stock.ts_code}`}
             className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
             title="查看详情"
           >
             <Eye className="w-4 h-4" />
           </Link>
           <button
-            onClick={() => onAddToWatchlist?.(stock.symbol)}
+            onClick={() => onAddToWatchlist?.(stock.ts_code)}
             className="p-2 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
             title="加入自选"
           >
             <Star className="w-4 h-4" />
           </button>
           <button
-            onClick={() => onViewDetail?.(stock.symbol)}
+            onClick={() => onViewDetail?.(stock.ts_code)}
             className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
             title="快速分析"
           >
@@ -291,12 +275,12 @@ export const StockTable: React.FC<StockTableProps> = ({
       let bValue = (b as any)[sortField];
       
       // 特殊处理字段
-      if (sortField === 'market_cap') {
-        aValue = a.market_cap;
-        bValue = b.market_cap;
-      } else if (sortField === 'volume') {
-        aValue = a.volume;
-        bValue = b.volume;
+      if (sortField === 'total_mv') {
+        aValue = a.total_mv;
+        bValue = b.total_mv;
+      } else if (sortField === 'vol') {
+        aValue = a.vol;
+        bValue = b.vol;
       }
       
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -414,7 +398,7 @@ export const StockTable: React.FC<StockTableProps> = ({
           <tbody className="divide-y divide-gray-100">
             {sortedStocks.map((stock, index) => (
               <tr 
-                key={stock.symbol}
+                key={stock.ts_code}
                 className={cn(
                   "hover:bg-gray-50 transition-colors",
                   index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
@@ -422,7 +406,7 @@ export const StockTable: React.FC<StockTableProps> = ({
               >
                 {columns.map(column => (
                   <td
-                    key={`${stock.symbol}-${column.key}`}
+                    key={`${stock.ts_code}-${column.key}`}
                     className={cn(
                       "px-4 py-4 text-sm",
                       column.align === 'center' && 'text-center',

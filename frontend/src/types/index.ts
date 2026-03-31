@@ -141,3 +141,30 @@ export interface ApiResponse<T> {
   data: T
   timestamp: string
 }
+
+// K线数据
+export interface KLineData {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  turnover?: number
+}
+
+// K线蜡烛图（KLineData别名）
+export interface Candlestick extends KLineData {}
+
+// 股票筛选条件（用于ScreeningPanel组件）
+export interface StockScreeningCondition {
+  id: string
+  name: string
+  type: 'range' | 'select' | 'boolean'
+  min?: number
+  max?: number
+  unit?: string
+  options?: Array<{ label: string; value: string }>
+  value: number | [number, number] | string | boolean
+  label?: string
+}

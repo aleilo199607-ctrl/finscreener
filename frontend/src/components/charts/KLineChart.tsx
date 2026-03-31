@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { format, subDays, parseISO } from 'date-fns';
 import { cn } from '@/utils/cn';
-import { Candlestick, KLineData } from '@/types';
+import { KLineData } from '@/types';
 import { TrendingUp, TrendingDown, BarChart3, Maximize2, Minimize2 } from 'lucide-react';
 
 interface KLineChartProps {

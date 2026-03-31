@@ -4,7 +4,7 @@ import {
   Menu, X, BarChart3, Filter, Search, Bell, 
   User, Settings, Home, TrendingUp, PieChart
 } from 'lucide-react'
-import { cn } from '@utils/cn'
+import { cn } from '@/utils/cn'
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)

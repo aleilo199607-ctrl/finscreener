@@ -6,7 +6,7 @@ import {
   Bookmark, Share2, RefreshCw, AlertCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn, formatCurrency, formatPercentage, getChangeColor } from '@utils/cn'
+import { cn, formatCurrency, formatPercentage, getChangeColor } from '@/utils/cn'
 
 const StockDetailPage = () => {
   const { code } = useParams<{ code: string }>()
