@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinScreener - 部署前端到Vercel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 50%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            padding: 40px 0 30px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d2ff, #7b2ff7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        .subtitle { color: #aaa; font-size: 1.1rem; }
+
+        .status-card {
+            background: rgba(0, 210, 100, 0.1);
+            border: 1px solid rgba(0, 210, 100, 0.3);
+            border-radius: 16px;
+            padding: 20px 30px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .status-icon { font-size: 2rem; }
+        .status-text h3 { color: #00d264; font-size: 1.1rem; }
+        .status-text p { color: #aaa; font-size: 0.9rem; margin-top: 4px; }
+        .url-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-family: monospace;
+            font-size: 0.95rem;
+            color: #00d2ff;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .steps { counter-reset: step; }
+        .step {
+            counter-increment: step;
+            display: flex;
+            gap: 16px;
+            margin: 20px 0;
+            align-items: flex-start;
+        }
+        .step-num {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #00d2ff, #7b2ff7);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .step-content h3 { font-size: 1rem; margin-bottom: 6px; }
+        .step-content p { color: #aaa; font-size: 0.9rem; line-height: 1.6; }
+        .step-content code {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #00d2ff;
+            font-size: 0.85rem;
+        }
+
+        .deploy-btn {
+            display: block;
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(90deg, #00d2ff, #7b2ff7);
+            color: white;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            margin: 30px 0;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        .deploy-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(0, 210, 255, 0.3);
+        }
+
+        .env-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .env-table th {
+            text-align: left;
+            padding: 10px 15px;
+            background: rgba(255,255,255,0.05);
+            color: #aaa;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .env-table td {
+            padding: 12px 15px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.9rem;
+        }
+        .env-table td:first-child { color: #00d2ff; font-family: monospace; }
+        .env-table td:last-child { color: #aaa; }
+
+        .highlight {
+            background: rgba(0, 210, 255, 0.1);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin: 15px 0;
+        }
+        .highlight p { color: #ccc; font-size: 0.9rem; line-height: 1.6; }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #555;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🚀 部署前端到 Vercel</h1>
+        <p class="subtitle">FinScreener 第二步：将React前端部署上线</p>
+    </div>
+
+    <div class="status-card">
+        <div class="status-icon">✅</div>
+        <div class="status-text">
+            <h3>Railway后端已成功部署！</h3>
+            <p>健康检查通过，API正常运行</p>
+            <div class="url-box">https://finscreener-production.up.railway.app/health</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📋 部署步骤（只需4步）</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>点击下方按钮，打开Vercel</h3>
+                    <p>跳转到 vercel.com，用GitHub账号登录</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>导入GitHub仓库</h3>
+                    <p>点击 <code>Add New → Project</code>，选择仓库 <code>aleilo199607-ctrl/finscreener</code></p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <h3>配置项目根目录</h3>
+                    <p>在 <strong>Root Directory</strong> 一栏填写 <code>frontend</code>（非常重要！）</p>
+                    <p style="margin-top:6px;">Framework Preset 会自动识别为 <code>Vite</code></p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-content">
+                    <h3>添加环境变量</h3>
+                    <p>在 <strong>Environment Variables</strong> 中添加以下变量，然后点击 <code>Deploy</code></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🔧 需要填写的环境变量</h2>
+        <div class="highlight">
+            <p>⚠️ 在Vercel的部署页面，展开 <strong>Environment Variables</strong>，逐条添加以下变量：</p>
+        </div>
+        <table class="env-table">
+            <tr>
+                <th>变量名（Name）</th>
+                <th>变量值（Value）</th>
+            </tr>
+            <tr>
+                <td>VITE_API_URL</td>
+                <td>https://finscreener-production.up.railway.app</td>
+            </tr>
+            <tr>
+                <td>VITE_APP_NAME</td>
+                <td>FinScreener</td>
+            </tr>
+            <tr>
+                <td>VITE_APP_VERSION</td>
+                <td>1.0.0</td>
+            </tr>
+        </table>
+    </div>
+
+    <button class="deploy-btn" onclick="openVercel()">
+        ▲ 点击这里打开 Vercel 部署页面
+    </button>
+
+    <div class="card">
+        <h2>✅ 部署成功后</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>获取Vercel URL</h3>
+                    <p>部署完成后，Vercel会给你一个 <code>xxx.vercel.app</code> 的域名</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>将Vercel URL告诉我</h3>
+                    <p>我会帮你更新Railway的CORS配置，让前后端顺利连接</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        FinScreener v1.0.0 | 后端: Railway ✅ | 前端: Vercel 部署中...
+    </footer>
+</div>
+<script>
+    function openVercel() {
+        window.open('https://vercel.com/new', '_blank');
+        setTimeout(() => {
+            alert('✅ Vercel已打开！\n\n请按步骤操作：\n1. 用GitHub账号登录\n2. Import 仓库：aleilo199607-ctrl/finscreener\n3. Root Directory 填写：frontend\n4. 添加环境变量 VITE_API_URL = https://finscreener-production.up.railway.app\n5. 点击 Deploy！');
+        }, 500);
+    }
+</script>
+</body>
+</html>
