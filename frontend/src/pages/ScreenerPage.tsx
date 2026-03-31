@@ -67,7 +67,7 @@ async function fetchScreeningResults(
   return json.data
 }
 
-const PAGE_SIZE = 30
+const PAGE_SIZE_OPTIONS = [20, 50, 100]
 
 const ScreenerPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -79,6 +79,7 @@ const ScreenerPage = () => {
   const [conditions, setConditions] = useState<StockScreeningCondition[]>([])
   const [showPanel, setShowPanel] = useState(true)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const [savedPresets, setSavedPresets] = useState<{ name: string; conditions: StockScreeningCondition[] }[]>([])
 
   // URL 参数变化时重置页码
@@ -90,8 +91,8 @@ const ScreenerPage = () => {
 
   // 主查询 - 包含所有筛选条件（面板条件 + URL参数）
   const query = useQuery<ScreeningResult>({
-    queryKey: ['screener', conditions, urlMarket, urlIndustry, page],
-    queryFn: () => fetchScreeningResults(conditions, urlMarket, urlIndustry, page, PAGE_SIZE),
+    queryKey: ['screener', conditions, urlMarket, urlIndustry, page, pageSize],
+    queryFn: () => fetchScreeningResults(conditions, urlMarket, urlIndustry, page, pageSize),
     staleTime: 2 * 60 * 1000,
   })
 
@@ -130,7 +131,7 @@ const ScreenerPage = () => {
     setPage(1)
   }
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
 
   // 当前激活的过滤标签（URL参数）
   const urlTags: { label: string; key: string }[] = []
@@ -302,47 +303,80 @@ const ScreenerPage = () => {
 
             <StockTable stocks={stocks} isLoading={isLoading} />
 
-            {/* 分页 */}
-            {totalPages > 1 && (
-              <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+            {/* 分页 - 始终显示 */}
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
                 <span className="text-xs text-gray-500">
-                  第 {page} / {totalPages} 页，共 {total.toLocaleString()} 条
+                  共 <span className="font-semibold text-gray-700">{total.toLocaleString()}</span> 条
+                  {totalPages > 1 && <>，第 <span className="font-semibold text-gray-700">{page}</span> / <span className="font-semibold text-gray-700">{totalPages}</span> 页</>}
                 </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    上一页
-                  </button>
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    const pageNum = Math.max(1, page - 2) + i
-                    if (pageNum > totalPages) return null
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`px-3 py-1.5 text-xs rounded-lg ${
-                          pageNum === page
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    )
-                  })}
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    下一页
-                  </button>
-                </div>
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-600"
+                >
+                  {PAGE_SIZE_OPTIONS.map(n => (
+                    <option key={n} value={n}>每页 {n} 条</option>
+                  ))}
+                </select>
               </div>
-            )}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                  className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  首页
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  上一页
+                </button>
+                {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 7) {
+                    pageNum = i + 1
+                  } else if (page <= 4) {
+                    pageNum = i + 1
+                  } else if (page >= totalPages - 3) {
+                    pageNum = totalPages - 6 + i
+                  } else {
+                    pageNum = page - 3 + i
+                  }
+                  if (pageNum < 1 || pageNum > totalPages) return null
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`px-3 py-1.5 text-xs rounded-lg ${
+                        pageNum === page
+                          ? 'bg-blue-600 text-white font-semibold'
+                          : 'border border-gray-200 hover:bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || totalPages === 0}
+                  className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  下一页
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages || totalPages === 0}
+                  className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  末页
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* 免责声明 */}

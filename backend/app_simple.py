@@ -414,39 +414,93 @@ async def get_industries():
 
 # ─── 股票筛选 ─────────────────────────────────────────────────────────────────
 
+def _classify_market(ts_code: str, raw_market: str) -> str:
+    """
+    根据 ts_code 和 stock_basic 的 market 字段推断正确的市场板块。
+    Tushare stock_basic.market 字段值域：主板 / 中小板 / 创业板
+    科创板：ts_code 以 68 开头且 .SH 后缀
+    北交所：ts_code 后缀为 .BJ
+    """
+    if not ts_code:
+        return raw_market or "主板"
+    code_upper = ts_code.upper()
+    if code_upper.endswith(".BJ"):
+        return "北交所"
+    pure = code_upper.split(".")[0]
+    if pure.startswith("68") and code_upper.endswith(".SH"):
+        return "科创板"
+    if isinstance(raw_market, str):
+        m = raw_market.strip()
+        if "创业" in m:
+            return "创业板"
+        if "科创" in m:
+            return "科创板"
+        if "中小" in m:
+            return "主板"   # 中小板已并入主板
+        if m in ("主板", "北交所"):
+            return m
+    return "主板"
+
+
 @app.post("/api/screening")
 async def screen_stocks(body: dict = {}):
-    """股票条件筛选"""
+    """股票条件筛选（支持板块/行业/数值多条件）"""
     conditions = body.get("conditions", [])
-    page = body.get("page", 1)
-    page_size = body.get("page_size", 20)
-    market = body.get("market", "")
-    industry = body.get("industry", "")
+    page = int(body.get("page", 1))
+    page_size = int(body.get("page_size", 50))
+    market = (body.get("market", "") or "").strip()
+    industry = (body.get("industry", "") or "").strip()
 
     trade_date = get_trade_date(0)
     results = []
     total = 0
+    data_source = "mock"
 
     if TUSHARE_AVAILABLE:
         try:
-            df_basic = pro.stock_basic(exchange="", list_status="L",
-                                       fields="ts_code,name,industry,market,list_date")
-            df_daily = pro.daily(trade_date=trade_date, limit=5000)
+            import pandas as pd
 
-            if df_basic is not None and df_daily is not None:
-                merged = df_daily.merge(df_basic, on="ts_code", how="left")
+            # 拉取全量股票基本信息（含 exchange 字段用于北交所识别）
+            df_basic = pro.stock_basic(
+                exchange="", list_status="L",
+                fields="ts_code,name,industry,market,list_date,exchange"
+            )
 
-                # 按市场过滤
-                if market and market not in ["全部股票", ""]:
-                    market_map = {"主板": "主板", "创业板": "创业板", "科创板": "科创板", "北交所": "北交所", "中小板": "中小板"}
-                    if market in market_map:
-                        merged = merged[merged["market"].str.contains(market_map[market], na=False)]
+            # 拉取当日行情，分两批防止截断（先试当天，再试前一日）
+            df_daily = None
+            for offset in [0, -1, -2, -3]:
+                td = get_trade_date(offset)
+                try:
+                    df_daily = pro.daily(trade_date=td)
+                    if df_daily is not None and len(df_daily) >= 100:
+                        trade_date = td
+                        break
+                except Exception:
+                    pass
 
-                # 按行业过滤
+            if df_basic is not None and df_daily is not None and len(df_daily) > 0:
+                # 修正 market 字段（Tushare 不含科创板/北交所）
+                df_basic["market_clean"] = df_basic.apply(
+                    lambda r: _classify_market(r["ts_code"], r.get("market", "")), axis=1
+                )
+
+                # 合并日行情与基本信息
+                merged = df_daily.merge(df_basic[["ts_code", "name", "industry", "market_clean"]], on="ts_code", how="left")
+                merged.rename(columns={"market_clean": "market"}, inplace=True)
+                merged["name"] = merged["name"].fillna(merged["ts_code"])
+                merged["industry"] = merged["industry"].fillna("未知")
+                merged["market"] = merged["market"].fillna("主板")
+
+                # ── 按市场板块过滤 ──────────────────────────────────────
+                if market and market not in ("全部股票", ""):
+                    merged = merged[merged["market"] == market]
+
+                # ── 按行业过滤（支持多关键词"|"分隔）──────────────────
                 if industry:
-                    merged = merged[merged["industry"].str.contains(industry, na=False)]
+                    pattern = industry.replace(",", "|").replace("，", "|")
+                    merged = merged[merged["industry"].str.contains(pattern, na=False, regex=True)]
 
-                # 应用条件筛选
+                # ── 数值条件筛选 ────────────────────────────────────────
                 for cond in conditions:
                     field = cond.get("field", "")
                     op = cond.get("operator", "gt")
@@ -464,6 +518,10 @@ async def screen_stocks(body: dict = {}):
                                 merged = merged[merged[field] >= val]
                             elif op in ["lte", "<="]:
                                 merged = merged[merged[field] <= val]
+                            elif op in ["between"]:
+                                # value 为 [min, max]
+                                if isinstance(val, list) and len(val) == 2:
+                                    merged = merged[(merged[field] >= val[0]) & (merged[field] <= val[1])]
                     except Exception:
                         pass
 
@@ -476,23 +534,43 @@ async def screen_stocks(body: dict = {}):
                     results.append({
                         "ts_code": str(row.get("ts_code", "")),
                         "name": str(row.get("name", "")),
-                        "industry": str(row.get("industry", "未知")) if row.get("industry") else "未知",
-                        "market": str(row.get("market", "A股")) if row.get("market") else "A股",
+                        "industry": str(row.get("industry", "未知")),
+                        "market": str(row.get("market", "主板")),
+                        "trade_date": str(trade_date),
                         "close": safe_float(row.get("close")),
+                        "open": safe_float(row.get("open")),
+                        "high": safe_float(row.get("high")),
+                        "low": safe_float(row.get("low")),
+                        "pre_close": safe_float(row.get("pre_close")),
                         "change": safe_float(row.get("change")),
                         "pct_chg": safe_float(row.get("pct_chg")),
                         "vol": safe_float(row.get("vol")),
                         "amount": safe_float(row.get("amount")),
+                        "turnover_rate": safe_float(row.get("turnover_rate")),
+                        "pe": safe_float(row.get("pe")),
+                        "pb": safe_float(row.get("pb")),
+                        "total_mv": safe_float(row.get("total_mv")),
+                        "circ_mv": safe_float(row.get("circ_mv")),
                     })
+                data_source = "tushare"
 
         except Exception as e:
-            logger.error(f"股票筛选失败: {e}")
+            logger.error(f"股票筛选失败: {e}", exc_info=True)
 
+    # ── 降级模拟数据（支持过滤+分页）───────────────────────────────────────
     if not results:
-        # 降级模拟数据
         mock_list = [gen_mock_quote(s) for s in MOCK_STOCKS]
+        # 按 market 过滤
+        if market and market not in ("全部股票", ""):
+            mock_list = [s for s in mock_list if s.get("market") == market]
+        # 按 industry 过滤
+        if industry:
+            keywords = industry.replace(",", "|").replace("，", "|").split("|")
+            mock_list = [s for s in mock_list if any(k in s.get("industry", "") for k in keywords if k)]
         total = len(mock_list)
-        results = mock_list
+        start = (page - 1) * page_size
+        results = mock_list[start:start + page_size]
+        data_source = "mock"
 
     return {
         "success": True,
@@ -502,7 +580,7 @@ async def screen_stocks(body: dict = {}):
             "page": page,
             "page_size": page_size,
             "trade_date": trade_date,
-            "data_source": "tushare" if TUSHARE_AVAILABLE else "mock",
+            "data_source": data_source,
         }
     }
 
@@ -570,9 +648,9 @@ async def get_stock_detail(ts_code: str):
 # ─── 路由别名/兼容端点 ───────────────────────────────────────────────────────
 
 @app.get("/api/stocks")
-async def get_stocks(market: str = "", industry: str = ""):
+async def get_stocks(market: str = "", industry: str = "", page: int = 1, page_size: int = 50):
     """获取股票列表（兼容旧接口）"""
-    return await screen_stocks({"market": market, "industry": industry})
+    return await screen_stocks({"market": market, "industry": industry, "page": page, "page_size": page_size})
 
 @app.post("/api/stocks/screen")
 async def screen_stocks_alias(body: dict = {}):
@@ -580,6 +658,6 @@ async def screen_stocks_alias(body: dict = {}):
     return await screen_stocks(body)
 
 @app.get("/api/stocks/screen")
-async def screen_stocks_get(market: str = "", industry: str = "", page: int = 1, page_size: int = 20):
+async def screen_stocks_get(market: str = "", industry: str = "", page: int = 1, page_size: int = 50):
     """股票筛选 GET 版本"""
     return await screen_stocks({"market": market, "industry": industry, "page": page, "page_size": page_size})
