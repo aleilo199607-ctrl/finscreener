@@ -567,9 +567,19 @@ async def get_stock_detail(ts_code: str):
         }
     }
 
-# ─── 旧兼容端点 ───────────────────────────────────────────────────────────────
+# ─── 路由别名/兼容端点 ───────────────────────────────────────────────────────
 
 @app.get("/api/stocks")
 async def get_stocks(market: str = "", industry: str = ""):
     """获取股票列表（兼容旧接口）"""
     return await screen_stocks({"market": market, "industry": industry})
+
+@app.post("/api/stocks/screen")
+async def screen_stocks_alias(body: dict = {}):
+    """股票条件筛选（路径别名）"""
+    return await screen_stocks(body)
+
+@app.get("/api/stocks/screen")
+async def screen_stocks_get(market: str = "", industry: str = "", page: int = 1, page_size: int = 20):
+    """股票筛选 GET 版本"""
+    return await screen_stocks({"market": market, "industry": industry, "page": page, "page_size": page_size})
