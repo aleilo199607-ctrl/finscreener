@@ -16,7 +16,17 @@ import random
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 尝试导入tushare
+# 尝试导入 AkShare（全量行情首选，完全免费）
+try:
+    import akshare as ak
+    AKSHARE_AVAILABLE = True
+    logger.info("AkShare 初始化成功")
+except Exception as e:
+    AKSHARE_AVAILABLE = False
+    ak = None
+    logger.warning(f"AkShare不可用: {e}")
+
+# 尝试导入tushare（用于股票基本信息、K线等非行情数据）
 try:
     import tushare as ts
     TUSHARE_TOKEN = os.environ.get("TUSHARE_TOKEN", "13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96")
@@ -462,6 +472,91 @@ def _classify_market(ts_code: str, raw_market: str) -> str:
     return "主板"
 
 
+def _apply_filters_and_paginate(merged, conditions, market, industry, page, page_size, trade_date, data_source):
+    """公共过滤+分页逻辑，避免重复代码"""
+    # ── 按市场板块过滤 ──────────────────────────────────────────────────────
+    if market and market not in ("全部股票", ""):
+        if "market" in merged.columns:
+            merged = merged[merged["market"] == market]
+
+    # ── 按行业过滤（支持多关键词"|"分隔）──────────────────────────────────
+    if industry and "industry" in merged.columns:
+        pattern = industry.replace(",", "|").replace("，", "|")
+        merged = merged[merged["industry"].str.contains(pattern, na=False, regex=True)]
+
+    # ── 数值条件筛选 ────────────────────────────────────────────────────────
+    # AkShare 字段名映射（东方财富接口使用中文或不同英文名）
+    field_alias = {
+        "pct_chg": "涨跌幅",
+        "close":   "最新价",
+        "vol":     "成交量",
+        "amount":  "成交额",
+        "turnover_rate": "换手率",
+        "pe":      "市盈率-动态",
+        "pb":      "市净率",
+        "total_mv": "总市值",
+        "circ_mv":  "流通市值",
+    }
+    for cond in conditions:
+        field = cond.get("field", "")
+        op = cond.get("operator", "gt")
+        val = cond.get("value")
+        if val is None or field == "":
+            continue
+        # 优先用原始字段名，不存在则尝试别名
+        col = field if field in merged.columns else field_alias.get(field, field)
+        if col not in merged.columns:
+            continue
+        try:
+            val = float(val)
+            if op in ["gt", ">"]:
+                merged = merged[merged[col] > val]
+            elif op in ["lt", "<"]:
+                merged = merged[merged[col] < val]
+            elif op in ["gte", ">="]:
+                merged = merged[merged[col] >= val]
+            elif op in ["lte", "<="]:
+                merged = merged[merged[col] <= val]
+        except Exception:
+            pass
+
+    total = len(merged)
+    start = (page - 1) * page_size
+    page_df = merged.iloc[start: start + page_size]
+
+    results = []
+    for _, row in page_df.iterrows():
+        # 兼容 AkShare 和 Tushare 两套字段名
+        def g(ak_col, ts_col=None):
+            v = row.get(ak_col)
+            if (v is None or (isinstance(v, float) and v != v)) and ts_col:
+                v = row.get(ts_col)
+            return v
+
+        results.append({
+            "ts_code":       str(row.get("ts_code") or row.get("代码") or ""),
+            "name":          str(row.get("name") or row.get("名称") or ""),
+            "industry":      str(row.get("industry") or row.get("行业") or "未知"),
+            "market":        str(row.get("market") or "主板"),
+            "trade_date":    str(trade_date),
+            "close":         safe_float(g("close", "最新价")),
+            "open":          safe_float(row.get("open")),
+            "high":          safe_float(row.get("high")),
+            "low":           safe_float(row.get("low")),
+            "pre_close":     safe_float(row.get("pre_close")),
+            "change":        safe_float(row.get("change") or row.get("涨跌额")),
+            "pct_chg":       safe_float(g("pct_chg", "涨跌幅")),
+            "vol":           safe_float(g("vol", "成交量")),
+            "amount":        safe_float(g("amount", "成交额")),
+            "turnover_rate": safe_float(g("turnover_rate", "换手率")),
+            "pe":            safe_float(g("pe", "市盈率-动态")),
+            "pb":            safe_float(g("pb", "市净率")),
+            "total_mv":      safe_float(g("total_mv", "总市值")),
+            "circ_mv":       safe_float(g("circ_mv", "流通市值")),
+        })
+    return results, total
+
+
 @app.post("/api/screening")
 async def screen_stocks(body: dict = {}):
     """股票条件筛选（支持板块/行业/数值多条件）"""
@@ -476,147 +571,152 @@ async def screen_stocks(body: dict = {}):
     total = 0
     data_source = "mock"
 
-    if TUSHARE_AVAILABLE:
+    # ══════════════════════════════════════════════════════════════════════
+    # 优先用 AkShare stock_zh_a_spot_em（东方财富实时行情）
+    # 一次请求返回全市场 5000+ 只股票，完全免费，无积分限制
+    # ══════════════════════════════════════════════════════════════════════
+    if AKSHARE_AVAILABLE:
         try:
             import pandas as pd
 
-            # 拉取全量股票基本信息（含 exchange 字段用于北交所识别）
+            logger.info("使用 AkShare 拉取全量 A 股实时行情...")
+            df_spot = ak.stock_zh_a_spot_em()   # 东方财富全量行情
+            logger.info(f"AkShare 返回 {len(df_spot)} 条记录")
+
+            if df_spot is not None and len(df_spot) >= 200:
+                # ── 字段标准化 ──────────────────────────────────────────
+                # AkShare 返回列名（部分版本）：序号,代码,名称,最新价,涨跌幅,涨跌额,
+                # 成交量,成交额,振幅,最高,最低,今开,昨收,换手率,市盈率-动态,量比,
+                # 市净率,总市值,流通市值,涨速,5分钟涨跌,60日涨跌幅,年初至今涨跌幅
+                col_map = {
+                    "代码":         "ts_code_raw",
+                    "名称":         "name",
+                    "最新价":       "close",
+                    "涨跌幅":       "pct_chg",
+                    "涨跌额":       "change",
+                    "成交量":       "vol",
+                    "成交额":       "amount",
+                    "最高":         "high",
+                    "最低":         "low",
+                    "今开":         "open",
+                    "昨收":         "pre_close",
+                    "换手率":       "turnover_rate",
+                    "市盈率-动态":  "pe",
+                    "市净率":       "pb",
+                    "总市值":       "total_mv",
+                    "流通市值":     "circ_mv",
+                }
+                df_spot = df_spot.rename(columns={k: v for k, v in col_map.items() if k in df_spot.columns})
+
+                # 生成标准 ts_code（600001 → 600001.SH，000001 → 000001.SZ，8xxxxx → 8xxxxx.BJ）
+                def to_ts_code(raw):
+                    raw = str(raw).zfill(6)
+                    if raw.startswith("6") or raw.startswith("5") or raw.startswith("11"):
+                        return raw + ".SH"
+                    elif raw.startswith("4") or raw.startswith("8") or raw.startswith("9"):
+                        return raw + ".BJ"
+                    else:
+                        return raw + ".SZ"
+
+                if "ts_code_raw" in df_spot.columns:
+                    df_spot["ts_code"] = df_spot["ts_code_raw"].apply(to_ts_code)
+                elif "ts_code" not in df_spot.columns:
+                    # 万一字段名已是英文
+                    df_spot["ts_code"] = df_spot.index.astype(str)
+
+                # 推断板块
+                df_spot["market"] = df_spot["ts_code"].apply(
+                    lambda c: _classify_market(c, "")
+                )
+
+                # 行业信息来自 Tushare stock_basic（AkShare 行情不含行业字段）
+                df_spot["industry"] = "未知"
+                if TUSHARE_AVAILABLE:
+                    try:
+                        df_basic = pro.stock_basic(
+                            exchange="", list_status="L",
+                            fields="ts_code,industry"
+                        )
+                        if df_basic is not None and not df_basic.empty:
+                            df_spot = df_spot.merge(
+                                df_basic.rename(columns={"industry": "industry_ts"}),
+                                on="ts_code", how="left"
+                            )
+                            df_spot["industry"] = df_spot["industry_ts"].fillna("未知")
+                            df_spot.drop(columns=["industry_ts"], inplace=True, errors="ignore")
+                    except Exception as e_basic:
+                        logger.warning(f"Tushare 行业信息获取失败，行业筛选不可用: {e_basic}")
+
+                # 数值列转 float（AkShare 可能返回字符串 "-"）
+                num_cols = ["close", "pct_chg", "change", "vol", "amount",
+                            "high", "low", "open", "pre_close",
+                            "turnover_rate", "pe", "pb", "total_mv", "circ_mv"]
+                for col in num_cols:
+                    if col in df_spot.columns:
+                        df_spot[col] = pd.to_numeric(df_spot[col], errors="coerce")
+
+                results, total = _apply_filters_and_paginate(
+                    df_spot, conditions, market, industry, page, page_size, trade_date, "akshare"
+                )
+                data_source = "akshare"
+                logger.info(f"AkShare 筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+
+        except Exception as e:
+            logger.error(f"AkShare 筛选失败: {e}", exc_info=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 备用：Tushare（积分不足时只能返回少量数据，作为 AkShare 不可用时的兜底）
+    # ══════════════════════════════════════════════════════════════════════
+    if not results and TUSHARE_AVAILABLE:
+        try:
+            import pandas as pd
+            logger.info("AkShare 不可用，回退到 Tushare...")
+
             df_basic = pro.stock_basic(
                 exchange="", list_status="L",
                 fields="ts_code,name,industry,market,list_date,exchange"
             )
-
-            # ── 分批拉取全量日行情，解决 Tushare 单次 20 条限制 ────────────────
-            # Tushare 支持 offset+limit 分页，每批最多 5000 条（受积分限制可能更少）
-            # 同时往前尝试多个交易日，防止节假日当天无数据
             df_daily = None
-            trade_date = get_trade_date(0)
-            for td_offset in range(8):  # 最多往前找8个自然交易日
+            for td_offset in range(8):
                 td = get_trade_date(-td_offset)
                 frames = []
                 batch_offset = 0
-                batch_size = 5000
                 while True:
                     try:
-                        chunk = pro.daily(trade_date=td, offset=batch_offset, limit=batch_size)
+                        chunk = pro.daily(trade_date=td, offset=batch_offset, limit=5000)
                     except Exception:
                         break
                     if chunk is None or chunk.empty:
                         break
                     frames.append(chunk)
-                    if len(chunk) < batch_size:
-                        break  # 已经是最后一批
-                    batch_offset += batch_size
+                    if len(chunk) < 5000:
+                        break
+                    batch_offset += 5000
                 if frames:
                     combined = pd.concat(frames, ignore_index=True)
-                    # 全市场正常交易日应超过 1000 只，否则视为节假日/数据未就绪
                     if len(combined) >= 200:
                         df_daily = combined
                         trade_date = td
                         break
 
-            if df_basic is not None and df_daily is not None and len(df_daily) > 0:
-                # 修正 market 字段（Tushare 不含科创板/北交所）
-                df_basic["market_clean"] = df_basic.apply(
+            if df_basic is not None and df_daily is not None:
+                df_basic["market"] = df_basic.apply(
                     lambda r: _classify_market(r["ts_code"], r.get("market", "")), axis=1
                 )
-
-                # ── 同样分批拉取 daily_basic（pe/pb/turnover_rate/total_mv）──────
-                db_frames = []
-                db_offset = 0
-                db_size = 5000
-                while True:
-                    try:
-                        db_chunk = pro.daily_basic(
-                            trade_date=trade_date, offset=db_offset, limit=db_size,
-                            fields="ts_code,turnover_rate,pe,pb,total_mv,circ_mv"
-                        )
-                    except Exception:
-                        break
-                    if db_chunk is None or db_chunk.empty:
-                        break
-                    db_frames.append(db_chunk)
-                    if len(db_chunk) < db_size:
-                        break
-                    db_offset += db_size
-                df_daily_basic = pd.concat(db_frames, ignore_index=True) if db_frames else None
-
-                # 合并日行情与基本信息
-                merged = df_daily.merge(df_basic[["ts_code", "name", "industry", "market_clean"]], on="ts_code", how="left")
-                merged.rename(columns={"market_clean": "market"}, inplace=True)
+                merged = df_daily.merge(
+                    df_basic[["ts_code", "name", "industry", "market"]], on="ts_code", how="left"
+                )
                 merged["name"] = merged["name"].fillna(merged["ts_code"])
                 merged["industry"] = merged["industry"].fillna("未知")
                 merged["market"] = merged["market"].fillna("主板")
 
-                # 合并 daily_basic 财务指标
-                if df_daily_basic is not None and not df_daily_basic.empty:
-                    merged = merged.merge(df_daily_basic, on="ts_code", how="left")
-
-                # ── 按市场板块过滤 ──────────────────────────────────────
-                if market and market not in ("全部股票", ""):
-                    merged = merged[merged["market"] == market]
-
-                # ── 按行业过滤（支持多关键词"|"分隔）──────────────────
-                if industry:
-                    pattern = industry.replace(",", "|").replace("，", "|")
-                    merged = merged[merged["industry"].str.contains(pattern, na=False, regex=True)]
-
-                # ── 数值条件筛选 ────────────────────────────────────────
-                for cond in conditions:
-                    field = cond.get("field", "")
-                    op = cond.get("operator", "gt")
-                    val = cond.get("value")
-                    if val is None or field == "":
-                        continue
-                    try:
-                        val = float(val)
-                        if field in merged.columns:
-                            if op in ["gt", ">"]:
-                                merged = merged[merged[field] > val]
-                            elif op in ["lt", "<"]:
-                                merged = merged[merged[field] < val]
-                            elif op in ["gte", ">="]:
-                                merged = merged[merged[field] >= val]
-                            elif op in ["lte", "<="]:
-                                merged = merged[merged[field] <= val]
-                            elif op in ["between"]:
-                                # value 为 [min, max]
-                                if isinstance(val, list) and len(val) == 2:
-                                    merged = merged[(merged[field] >= val[0]) & (merged[field] <= val[1])]
-                    except Exception:
-                        pass
-
-                total = len(merged)
-                start = (page - 1) * page_size
-                end = start + page_size
-                page_df = merged.iloc[start:end]
-
-                for _, row in page_df.iterrows():
-                    results.append({
-                        "ts_code": str(row.get("ts_code", "")),
-                        "name": str(row.get("name", "")),
-                        "industry": str(row.get("industry", "未知")),
-                        "market": str(row.get("market", "主板")),
-                        "trade_date": str(trade_date),
-                        "close": safe_float(row.get("close")),
-                        "open": safe_float(row.get("open")),
-                        "high": safe_float(row.get("high")),
-                        "low": safe_float(row.get("low")),
-                        "pre_close": safe_float(row.get("pre_close")),
-                        "change": safe_float(row.get("change")),
-                        "pct_chg": safe_float(row.get("pct_chg")),
-                        "vol": safe_float(row.get("vol")),
-                        "amount": safe_float(row.get("amount")),
-                        "turnover_rate": safe_float(row.get("turnover_rate")),
-                        "pe": safe_float(row.get("pe")),
-                        "pb": safe_float(row.get("pb")),
-                        "total_mv": safe_float(row.get("total_mv")),
-                        "circ_mv": safe_float(row.get("circ_mv")),
-                    })
+                results, total = _apply_filters_and_paginate(
+                    merged, conditions, market, industry, page, page_size, trade_date, "tushare"
+                )
                 data_source = "tushare"
 
         except Exception as e:
-            logger.error(f"股票筛选失败: {e}", exc_info=True)
+            logger.error(f"Tushare 筛选失败: {e}", exc_info=True)
 
     # ── 降级模拟数据（支持过滤+分页）───────────────────────────────────────
     if not results:
