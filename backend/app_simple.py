@@ -22,7 +22,13 @@ app = FastAPI(
 )
 
 # 配置CORS
-origins = os.environ.get("CORS_ORIGINS", "https://finscreener.vercel.app,http://localhost:3000").split(",")
+default_origins = (
+    "https://finscreener-wcxd.vercel.app,"
+    "https://finscreener.vercel.app,"
+    "http://localhost:3000,"
+    "http://localhost:5173"
+)
+origins = os.environ.get("CORS_ORIGINS", default_origins).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
