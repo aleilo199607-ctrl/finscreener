@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinScreener 最终部署链接</title>
+    <script>
+        // 页面加载后自动重定向到Railway部署页面
+        window.onload = function() {
+            // 构建部署链接（已包含所有环境变量）
+            const envVars = {
+                TUSHARE_TOKEN: '13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96',
+                AI_PROVIDER: 'mock',
+                ENVIRONMENT: 'production',
+                CORS_ORIGINS: 'https://finscreener.vercel.app,http://localhost:3000',
+                LOG_LEVEL: 'INFO',
+                CACHE_TTL: '300'
+            };
+            
+            // 构建查询字符串
+            let queryString = '';
+            for (const [key, value] of Object.entries(envVars)) {
+                queryString += `${encodeURIComponent(key)}=${encodeURIComponent(value)}&`;
+            }
+            queryString = queryString.slice(0, -1); // 移除最后一个&
+            
+            const deployUrl = `https://railway.app/new?template=python&env=${encodeURIComponent(queryString)}`;
+            
+            // 显示链接
+            document.getElementById('deploy-link').href = deployUrl;
+            document.getElementById('deploy-link').textContent = deployUrl;
+            
+            // 尝试自动打开（可能需要用户确认）
+            setTimeout(() => {
+                const shouldAutoOpen = confirm('是否自动打开Railway部署页面？\n\n点击"确定"打开部署页面\n点击"取消"手动复制链接');
+                if (shouldAutoOpen) {
+                    window.open(deployUrl, '_blank');
+                }
+            }, 1000);
+        };
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .deploy-section {
+            background: #f5f5f5;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .deploy-button {
+            display: inline-block;
+            background: #0070f3;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        .deploy-button:hover {
+            background: #0051cc;
+        }
+        .env-vars {
+            background: #2d3748;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: monospace;
+            text-align: left;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 FinScreener Railway 最终部署</h1>
+    
+    <div class="deploy-section">
+        <h2>一键部署链接</h2>
+        <p>点击下方按钮开始部署：</p>
+        <a id="deploy-link" href="#" class="deploy-button" target="_blank">
+            点击这里部署到Railway
+        </a>
+        <p>或手动复制链接：</p>
+        <p id="link-display" style="word-break: break-all; background: #f0f0f0; padding: 10px;"></p>
+    </div>
+    
+    <div class="env-vars">
+        <h3>已配置的环境变量：</h3>
+        <ul>
+            <li>TUSHARE_TOKEN=13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96</li>
+            <li>AI_PROVIDER=mock</li>
+            <li>ENVIRONMENT=production</li>
+            <li>CORS_ORIGINS=https://finscreener.vercel.app,http://localhost:3000</li>
+            <li>LOG_LEVEL=INFO</li>
+            <li>CACHE_TTL=300</li>
+        </ul>
+    </div>
+    
+    <h2>部署步骤：</h2>
+    <ol>
+        <li>点击上面的部署按钮</li>
+        <li>登录GitHub账号（如果未登录）</li>
+        <li>授权Railway访问你的仓库</li>
+        <li>选择仓库：<strong>aleilo199607-ctrl/finscreener</strong></li>
+        <li>等待部署完成（约2-3分钟）</li>
+        <li>复制Railway URL并保存</li>
+    </ol>
+    
+    <script>
+        // 在页面显示链接
+        const envVars = {
+            TUSHARE_TOKEN: '13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96',
+            AI_PROVIDER: 'mock',
+            ENVIRONMENT: 'production',
+            CORS_ORIGINS: 'https://finscreener.vercel.app,http://localhost:3000',
+            LOG_LEVEL: 'INFO',
+            CACHE_TTL: '300'
+        };
+        
+        let queryString = '';
+        for (const [key, value] of Object.entries(envVars)) {
+            queryString += `${encodeURIComponent(key)}=${encodeURIComponent(value)}&`;
+        }
+        queryString = queryString.slice(0, -1);
+        
+        const deployUrl = `https://railway.app/new?template=python&env=${encodeURIComponent(queryString)}`;
+        
+        document.getElementById('link-display').textContent = deployUrl;
+        document.getElementById('deploy-link').href = deployUrl;
+    </script>
+</body>
+</html>

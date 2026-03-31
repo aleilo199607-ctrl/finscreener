@@ -1,0 +1,54 @@
+# 忽略前端文件（前端由Vercel单独部署）
+frontend/
+node_modules/
+package*.json
+
+# 忽略开发工具
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 忽略测试和文档
+tests/
+docs/
+*.log
+
+# 忽略临时文件
+*.tmp
+*.temp
+dist/
+build/
+*.egg-info/
+*.egg
+
+# 忽略我们的部署工具文件（已经用过）
+railway_deploy_automated.bat
+direct_railway_api.ps1
+get_railway_token.py
+direct_railway_deploy.py
+auto_deploy_railway.py
+deploy_with_api.ps1
+create_railway_config.py
+try_railway_login.bat
+final_deploy.bat
+
+# 忽略HTML部署页面
+ONE_CLICK_RAILWAY.html
+ULTIMATE_DEPLOY.html
+FINAL_DEPLOYMENT_LINK.html
+
+# 忽略Markdown指南
+GET_RAILWAY_TOKEN.md
+railway_env_variables.txt
+
+# 忽略项目文件
+PROJECT_PLAN.md
