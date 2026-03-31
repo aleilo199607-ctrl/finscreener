@@ -31,28 +31,45 @@ def fetch_eastmoney_all_stocks():
     """
     东方财富全市场A股实时行情（5000+只）
     接口来源：东方财富网页版，完全免费，无积分限制
+    分页获取所有股票
     """
     url = "https://push2.eastmoney.com/api/qt/clist/get"
     all_stocks = []
     
-    # 分批获取：沪深A股 + 北交所
-    market_params = [
-        {"pn": 1, "pz": 500, "po": 1, "np": 1, "fltt": 2, "invt": 2, 
-         "fid": "f12", "fs": "m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23", 
-         "fields": "f12,f14,f20,f21,f23,f24,f25,f26,f33,f34,f35,f36,f37,f38,f39,f40,f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100"},
-    ]
+    # 沪深A股市场参数
+    base_params = {
+        "po": 1, "np": 1, "fltt": 2, "invt": 2, 
+        "fid": "f12", 
+        "fs": "m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23",  # 沪深A股
+        "fields": "f12,f14,f20,f21,f23,f24,f25,f26,f33,f34,f35,f36,f37,f38,f39,f40,f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100"
+    }
     
-    for params in market_params:
+    # 分页获取，每页500条，最多20页（10000只）
+    for page_num in range(1, 21):
         try:
+            params = {**base_params, "pn": page_num, "pz": 500}
             resp = requests.get(url, params=params, headers=_EFN_HEADERS, timeout=15)
             data = resp.json()
+            
             if data.get("data") and data["data"].get("diff"):
                 stocks = data["data"]["diff"]
-                logger.info(f"东方财富返回 {len(stocks)} 只股票")
-                return stocks
+                if not stocks:
+                    break  # 没有更多数据了
+                all_stocks.extend(stocks)
+                logger.info(f"东方财富第{page_num}页返回 {len(stocks)} 只股票，累计 {len(all_stocks)} 只")
+                
+                # 如果这页不足500条，说明是最后一页
+                if len(stocks) < 500:
+                    break
+            else:
+                break
         except Exception as e:
-            logger.warning(f"东方财富接口请求失败: {e}")
+            logger.warning(f"东方财富接口第{page_num}页请求失败: {e}")
+            break
     
+    if all_stocks:
+        logger.info(f"✅ 东方财富总共获取 {len(all_stocks)} 只股票")
+        return all_stocks
     return None
 
 
