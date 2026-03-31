@@ -51,6 +51,6 @@
     }
   ],
   "env": {
-    "VITE_API_URL": "https://finscreener-api.up.railway.app"
+    "VITE_API_URL": "https://finscreener-production.up.railway.app"
   }
 }
