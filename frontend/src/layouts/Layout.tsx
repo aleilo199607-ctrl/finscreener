@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
 import { 
   Menu, X, BarChart3, Filter, Search, Bell, 
@@ -9,6 +9,7 @@ import { cn } from '@/utils/cn'
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
+  const [searchParams] = useSearchParams()
 
   const navigation = [
     { name: '首页', href: '/', icon: Home },
@@ -121,35 +122,58 @@ const Layout = () => {
           </div>
           <nav className="flex-1 p-4 space-y-1">
             {[
-              { name: '全部股票', count: 4500, market: '' },
-              { name: '主板', count: 2200, market: '主板' },
+              { name: '全部股票', count: 5300, market: '' },
+              { name: '主板', count: 1700, market: '主板' },
               { name: '创业板', count: 1200, market: '创业板' },
-              { name: '科创板', count: 800, market: '科创板' },
-              { name: '北交所', count: 300, market: '北交所' },
-            ].map((market) => (
-              <Link
-                key={market.name}
-                to={market.market ? `/screener?market=${market.market}` : '/screener'}
-                className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 group"
-              >
-                <span>{market.name}</span>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                  {market.count}
-                </span>
-              </Link>
-            ))}
+              { name: '科创板', count: 580, market: '科创板' },
+              { name: '北交所', count: 250, market: '北交所' },
+            ].map((item) => {
+              const isActive = location.pathname === '/screener' &&
+                (item.market === '' ? !searchParams.get('market') : searchParams.get('market') === item.market)
+              return (
+                <Link
+                  key={item.name}
+                  to={item.market ? `/screener?market=${encodeURIComponent(item.market)}` : '/screener'}
+                  className={cn(
+                    "flex items-center justify-between px-3 py-2 rounded-lg transition-colors group",
+                    isActive
+                      ? "bg-blue-50 text-blue-700 font-medium"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  )}
+                >
+                  <span>{item.name}</span>
+                  <span className={cn(
+                    "text-xs px-2 py-0.5 rounded",
+                    isActive ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"
+                  )}>
+                    {item.count.toLocaleString()}
+                  </span>
+                </Link>
+              )
+            })}
           </nav>
 
           <div className="p-4 border-t">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">热门行业</h2>
             <div className="mt-2 space-y-1">
-              {['电子', '医药生物', '计算机', '新能源', '消费'].map((industry) => (
+              {[
+                { label: '电子', value: '电子' },
+                { label: '医药生物', value: '医药生物' },
+                { label: '计算机', value: '计算机' },
+                { label: '新能源', value: '新能源' },
+                { label: '食品饮料', value: '消费' },
+              ].map((item) => (
                 <Link
-                  key={industry}
-                  to="/industries"
-                  className="block px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                  key={item.label}
+                  to={`/screener?industry=${encodeURIComponent(item.value)}`}
+                  className={cn(
+                    "block px-3 py-1.5 text-sm rounded hover:bg-blue-50 hover:text-blue-700 transition-colors",
+                    location.pathname === '/screener' && location.search.includes(`industry=${encodeURIComponent(item.value)}`)
+                      ? "bg-blue-50 text-blue-700 font-medium"
+                      : "text-gray-600"
+                  )}
                 >
-                  {industry}
+                  {item.label}
                 </Link>
               ))}
             </div>

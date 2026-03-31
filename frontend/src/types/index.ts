@@ -12,6 +12,9 @@ export interface Stock {
 // 股票行情数据
 export interface StockQuote {
   ts_code: string
+  name?: string       // 股票名称
+  industry?: string   // 所属行业
+  market?: string     // 市场板块
   trade_date: string
   open: number
   high: number

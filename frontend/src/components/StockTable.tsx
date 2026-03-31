@@ -41,15 +41,25 @@ export const StockTable: React.FC<StockTableProps> = ({
   const columns: Column[] = [
     {
       key: 'ts_code',
-      title: '代码',
+      title: '代码 / 名称',
       align: 'left',
       sortable: true,
       icon: <Filter className="w-3 h-3" />,
-      width: '80px',
+      width: '130px',
       render: (stock) => (
-        <div className="flex flex-col">
-          <span className="font-mono font-bold text-gray-900">{stock.ts_code?.split('.')[0]}</span>
-          <span className="text-xs text-gray-500">{stock.ts_code?.split('.')[1]}</span>
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-gray-900 text-sm">{stock.ts_code?.split('.')[0]}</span>
+            <span className="text-[10px] px-1 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">{stock.ts_code?.split('.')[1]}</span>
+          </div>
+          {stock.name ? (
+            <span className="text-sm font-medium text-blue-700 mt-0.5 truncate max-w-[110px]" title={stock.name}>{stock.name}</span>
+          ) : (
+            <span className="text-xs text-gray-400 mt-0.5">—</span>
+          )}
+          {stock.industry && (
+            <span className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[110px]">{stock.industry}</span>
+          )}
         </div>
       ),
     },
