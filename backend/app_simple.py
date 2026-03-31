@@ -11,20 +11,160 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional, List
 import random
+import requests
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 尝试导入 AkShare（全量行情首选，完全免费）
+# ══════════════════════════════════════════════════════════════════════════════
+# 东方财富直连接口（无需任何第三方库，只用 requests，100% 免费无限制）
+# ══════════════════════════════════════════════════════════════════════════════
+_EFN_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://quote.eastmoney.com/center/gridlist.html",
+    "Accept": "*/*",
+}
+
+def fetch_eastmoney_all_stocks():
+    """
+    直接请求东方财富行情中心接口，一次性获取 A 股全量实时行情（5000+ 只）。
+    返回 pandas DataFrame，字段已标准化为英文。
+    东方财富 fs=m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23 涵盖上证/深证/创业板/科创板/北交所。
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        return None
+
+    # 分批拉取（每批500条，最多拉20批=10000条，A股约5200只）
+    all_rows = []
+    pn = 1
+    pz = 500
+    max_pages = 20
+
+    url = "https://push2.eastmoney.com/api/qt/clist/get"
+
+    for page in range(1, max_pages + 1):
+        params = {
+            "cb": "jQuery",
+            "pn": page,
+            "pz": pz,
+            "po": 1,
+            "np": 1,
+            "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+            "fltt": 2,
+            "invt": 2,
+            "wbp2u": "|0|0|0|web",
+            "fid": "f3",
+            "fs": "m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23,m:0+t:80,m:1+t:80,m:2+t:80,m:2+t:81,m:0+t:81",
+            "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f62,f115",
+            "_": int(datetime.now().timestamp() * 1000),
+        }
+        try:
+            resp = requests.get(url, params=params, headers=_EFN_HEADERS, timeout=15)
+            text = resp.text
+            # 去掉 jQuery(...) 包装
+            if text.startswith("jQuery"):
+                text = text[text.index("(") + 1: text.rindex(")")]
+            data = json.loads(text)
+            diffs = data.get("data", {}).get("diff", [])
+            if not diffs:
+                break
+            all_rows.extend(diffs)
+            if len(diffs) < pz:
+                break
+        except Exception as e:
+            logger.warning(f"东方财富第{page}页拉取失败: {e}")
+            if page == 1:
+                return None
+            break
+
+    if not all_rows:
+        return None
+
+    logger.info(f"东方财富直连接口返回 {len(all_rows)} 条记录")
+
+    # 字段映射（东方财富 f 字段含义）
+    field_map = {
+        "f12": "ts_code_raw",  # 代码
+        "f14": "name",         # 名称
+        "f2":  "close",        # 最新价（×100 缩放，fltt=2时已为实际值）
+        "f3":  "pct_chg",      # 涨跌幅
+        "f4":  "change",       # 涨跌额
+        "f5":  "vol",          # 成交量（手）
+        "f6":  "amount",       # 成交额（元）
+        "f7":  "amplitude",    # 振幅
+        "f8":  "turnover_rate",# 换手率
+        "f9":  "pe",           # 市盈率(动)
+        "f10": "vol_ratio",    # 量比
+        "f15": "high",         # 最高
+        "f16": "low",          # 最低
+        "f17": "open",         # 今开
+        "f18": "pre_close",    # 昨收
+        "f20": "total_mv",     # 总市值（元）
+        "f21": "circ_mv",      # 流通市值（元）
+        "f23": "pb",           # 市净率
+        "f13": "market_flag",  # 所属市场（0=深圳,1=上海,2=北交所）
+    }
+
+    rows = []
+    for item in all_rows:
+        row = {}
+        for fkey, col in field_map.items():
+            v = item.get(fkey, "-")
+            row[col] = None if v == "-" else v
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # 生成标准 ts_code
+    def _to_ts_code(raw, mflag):
+        raw = str(raw or "").zfill(6)
+        mflag = str(mflag or "")
+        if mflag == "1":
+            return raw + ".SH"
+        elif mflag == "2":
+            return raw + ".BJ"
+        else:
+            # 深证：按代码前缀区分
+            if raw.startswith("4") or raw.startswith("8") or raw.startswith("9"):
+                return raw + ".BJ"
+            return raw + ".SZ"
+
+    df["ts_code"] = df.apply(
+        lambda r: _to_ts_code(r.get("ts_code_raw"), r.get("market_flag")), axis=1
+    )
+
+    # 市值单位转换：元 → 万元（与原有逻辑一致）
+    for col in ["total_mv", "circ_mv"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce") / 10000.0
+
+    # 数值列统一转 float
+    num_cols = ["close", "pct_chg", "change", "vol", "amount", "amplitude",
+                "turnover_rate", "pe", "pb", "high", "low", "open", "pre_close",
+                "vol_ratio"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+
+# 尝试导入 AkShare（作为备用，安装失败也无影响）
 try:
     import akshare as ak
     AKSHARE_AVAILABLE = True
-    logger.info("AkShare 初始化成功")
+    logger.info("AkShare 初始化成功（备用）")
 except Exception as e:
     AKSHARE_AVAILABLE = False
     ak = None
-    logger.warning(f"AkShare不可用: {e}")
+    logger.info(f"AkShare不可用（已有东方财富直连方案，无影响）: {e}")
 
 # 尝试导入tushare（用于股票基本信息、K线等非行情数据）
 try:
@@ -194,10 +334,13 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "FinScreener API",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "simple_mode": True,
         "tushare_available": TUSHARE_AVAILABLE,
-        "message": "API正常运行中",
+        "akshare_available": AKSHARE_AVAILABLE,
+        "eastmoney_direct": True,   # 东方财富直连始终可用（只依赖 requests）
+        "primary_datasource": "eastmoney_direct",
+        "message": "API正常运行中 - 已使用东方财富直连接口（5000+ 只 A 股）",
     }
 
 @app.get("/")
@@ -572,10 +715,45 @@ async def screen_stocks(body: dict = {}):
     data_source = "mock"
 
     # ══════════════════════════════════════════════════════════════════════
-    # 优先用 AkShare stock_zh_a_spot_em（东方财富实时行情）
-    # 一次请求返回全市场 5000+ 只股票，完全免费，无积分限制
+    # 第一优先级：东方财富 HTTP 直连（无需第三方库，只用 requests）
+    # 一次拉取全市场 5000+ 只 A 股，完全免费，无积分限制
     # ══════════════════════════════════════════════════════════════════════
-    if AKSHARE_AVAILABLE:
+    try:
+        import pandas as pd
+        df_em = fetch_eastmoney_all_stocks()
+        if df_em is not None and len(df_em) >= 200:
+            df_em["market"] = df_em["ts_code"].apply(lambda c: _classify_market(c, ""))
+            df_em["industry"] = "未知"
+
+            # 尝试用 Tushare 补全行业信息
+            if TUSHARE_AVAILABLE:
+                try:
+                    df_basic_ind = pro.stock_basic(
+                        exchange="", list_status="L",
+                        fields="ts_code,industry"
+                    )
+                    if df_basic_ind is not None and not df_basic_ind.empty:
+                        df_em = df_em.merge(
+                            df_basic_ind.rename(columns={"industry": "_ind"}),
+                            on="ts_code", how="left"
+                        )
+                        df_em["industry"] = df_em["_ind"].fillna("未知")
+                        df_em.drop(columns=["_ind"], inplace=True, errors="ignore")
+                except Exception as e_ind:
+                    logger.warning(f"Tushare 行业信息获取失败: {e_ind}")
+
+            results, total = _apply_filters_and_paginate(
+                df_em, conditions, market, industry, page, page_size, trade_date, "eastmoney"
+            )
+            data_source = "eastmoney"
+            logger.info(f"东方财富直连筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+    except Exception as e_em:
+        logger.error(f"东方财富直连失败: {e_em}", exc_info=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 第二优先级：AkShare stock_zh_a_spot_em（东方财富实时行情，需安装库）
+    # ══════════════════════════════════════════════════════════════════════
+    if not results and AKSHARE_AVAILABLE:
         try:
             import pandas as pd
 
