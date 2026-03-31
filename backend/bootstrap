@@ -1,0 +1,7 @@
+#!/bin/bash
+# 阿里云函数计算 Web函数启动脚本
+# 监听 FC_SERVER_PORT 端口（默认9000）
+
+export PORT=${FC_SERVER_PORT:-9000}
+
+exec uvicorn app_fc:app --host 0.0.0.0 --port $PORT --workers 1

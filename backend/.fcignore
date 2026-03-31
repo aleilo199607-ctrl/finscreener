@@ -1,0 +1,18 @@
+# .fcignore - 阿里云函数计算部署时忽略的文件
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.log
+tests/
+start_simple.py
+app_simple.py
+requirements_simple.txt
