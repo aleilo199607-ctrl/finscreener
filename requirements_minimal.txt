@@ -4,19 +4,17 @@
 # 核心FastAPI
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6
 
 # 基础数据处理
 pandas>=2.1.4
 numpy>=1.26.2
 
-# Tushare核心依赖（必需）
+# Tushare核心依赖
 tushare>=1.2.89
 requests>=2.31.0
 
 # 数据库
 sqlalchemy>=2.0.23
-alembic>=1.13.1
 psycopg2-binary>=2.9.9
 databases[postgresql]>=0.8.0
 
@@ -25,15 +23,15 @@ redis>=5.0.1
 
 # 配置和环境变量
 python-dotenv>=1.0.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
 
 # HTTP客户端
 httpx>=0.25.2
 
-# 移除以下可能的问题依赖：
-# - akshare（版本问题）- 会在运行时可选导入
-# - ta-lib（C扩展问题）- 使用模拟版本
-# - openai等AI依赖（可选）- 会在运行时可选导入
+# 简化版本，移除以下可能的问题：
+# - akshare（版本问题）
+# - ta-lib（C扩展问题）
+# - openai（可选依赖）
+# - 其他可选AI依赖
+# - 开发工具（pytest等）
 
-# Railway构建会更稳定，部署成功后可以再安装可选依赖
+# 注意：我们会在运行时检测并可选地导入这些依赖

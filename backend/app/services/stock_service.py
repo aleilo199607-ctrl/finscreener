@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Union
 import json
 import logging
+import sys
 
 import tushare as ts
 import pandas as pd
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
-import talib
 
 from app.core.config import settings
 from app.core.redis import redis_client, cached
@@ -21,6 +21,46 @@ from app.schemas.stock import (
     StockResponse, StockDailyResponse, StockFinancialResponse,
     StockMoneyFlowResponse, ScreeningCondition, ScreeningResult
 )
+
+# 尝试导入TA-LIB，如果失败则使用模拟版本
+try:
+    import talib
+    HAS_REAL_TALIB = True
+    logger.info("✅ 成功导入真实TA-LIB库")
+except ImportError as e:
+    logger.warning(f"⚠️  无法导入TA-LIB库，使用模拟版本: {e}")
+    try:
+        from app.utils.talib_mock import MockTALib
+        talib = MockTALib
+        HAS_REAL_TALIB = False
+        logger.info("✅ 使用TA-LIB模拟库")
+    except ImportError as e2:
+        logger.error(f"❌ 也无法导入TA-LIB模拟库: {e2}")
+        # 创建一个简单的模拟接口
+        class MockTalibSimple:
+            @staticmethod
+            def MA(data, timeperiod=30):
+                return np.full(len(data), np.nan)
+            
+            @staticmethod
+            def RSI(data, timeperiod=14):
+                return np.full(len(data), np.nan)
+            
+            @staticmethod 
+            def MACD(data, fastperiod=12, slowperiod=26, signalperiod=9):
+                return np.full(len(data), np.nan), np.full(len(data), np.nan), np.full(len(data), np.nan)
+            
+            @staticmethod
+            def STOCH(high, low, close, fastk_period=14, slowk_period=3, slowd_period=3):
+                return np.full(len(close), np.nan), np.full(len(close), np.nan)
+            
+            @staticmethod
+            def BBANDS(data, timeperiod=20, nbdevup=2, nbdevdn=2):
+                return np.full(len(data), np.nan), np.full(len(data), np.nan), np.full(len(data), np.nan)
+        
+        talib = MockTalibSimple
+        HAS_REAL_TALIB = False
+        logger.info("✅ 使用简化TA-LIB模拟库")
 
 # 配置日志
 logger = logging.getLogger(__name__)

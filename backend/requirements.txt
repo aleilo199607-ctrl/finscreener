@@ -11,10 +11,11 @@ databases[postgresql]==0.8.0
 
 # 数据源
 tushare==1.2.89
-akshare==1.12.79
-pandas==2.1.4
-numpy==1.26.2
-ta-lib==0.4.28
+akshare>=1.18.49
+pandas>=2.1.4
+numpy>=1.26.2
+# ta-lib 注释掉，因为安装复杂，Railway可能不支持
+# ta-lib==0.4.28
 
 # AI集成
 openai==1.3.5
