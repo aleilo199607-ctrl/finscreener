@@ -13,9 +13,9 @@ const Layout = () => {
   const navigation = [
     { name: '首页', href: '/', icon: Home },
     { name: '股票筛选', href: '/screener', icon: Filter },
-    { name: '热门股票', href: '/screener', icon: TrendingUp },
-    { name: '市场概况', href: '/screener', icon: BarChart3 },
-    { name: '行业分析', href: '/screener', icon: PieChart },
+    { name: '热门股票', href: '/market/hot', icon: TrendingUp },
+    { name: '市场概况', href: '/market/overview', icon: BarChart3 },
+    { name: '行业分析', href: '/industries', icon: PieChart },
   ]
 
   return (
@@ -121,15 +121,15 @@ const Layout = () => {
           </div>
           <nav className="flex-1 p-4 space-y-1">
             {[
-              { name: '全部股票', count: 4500 },
-              { name: '主板', count: 2200 },
-              { name: '创业板', count: 1200 },
-              { name: '科创板', count: 800 },
-              { name: '北交所', count: 300 },
+              { name: '全部股票', count: 4500, market: '' },
+              { name: '主板', count: 2200, market: '主板' },
+              { name: '创业板', count: 1200, market: '创业板' },
+              { name: '科创板', count: 800, market: '科创板' },
+              { name: '北交所', count: 300, market: '北交所' },
             ].map((market) => (
               <Link
                 key={market.name}
-                to="/screener"
+                to={market.market ? `/screener?market=${market.market}` : '/screener'}
                 className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 group"
               >
                 <span>{market.name}</span>
@@ -146,7 +146,7 @@ const Layout = () => {
               {['电子', '医药生物', '计算机', '新能源', '消费'].map((industry) => (
                 <Link
                   key={industry}
-                  to="/screener"
+                  to="/industries"
                   className="block px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900"
                 >
                   {industry}

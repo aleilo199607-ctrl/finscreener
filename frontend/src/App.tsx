@@ -4,6 +4,9 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import Layout from './layouts/Layout'
 import ScreenerPage from './pages/ScreenerPage'
 import StockDetailPage from './pages/StockDetailPage'
+import HotStocksPage from './pages/HotStocksPage'
+import MarketOverviewPage from './pages/MarketOverviewPage'
+import IndustriesPage from './pages/IndustriesPage'
 import NotFoundPage from './pages/NotFoundPage'
 import { queryClient } from './services/api'
 
@@ -16,6 +19,9 @@ function App() {
             <Route index element={<ScreenerPage />} />
             <Route path="screener" element={<ScreenerPage />} />
             <Route path="stock/:code" element={<StockDetailPage />} />
+            <Route path="market/hot" element={<HotStocksPage />} />
+            <Route path="market/overview" element={<MarketOverviewPage />} />
+            <Route path="industries" element={<IndustriesPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
