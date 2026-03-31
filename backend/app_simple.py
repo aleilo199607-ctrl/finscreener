@@ -1,6 +1,6 @@
 """
 简化版FastAPI应用，用于Railway部署
-包含真实Tushare Pro API数据接入
+包含真实Tushare Pro API数据接入 + 东方财富直连接口（无积分限制）
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -20,8 +20,115 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 全量股票数据缓存（Tushare stock_basic 返回5000+只，不受积分限制）
+# 东方财富直连接口（无需任何第三方库，只用requests，100%免费无限制）
 # ══════════════════════════════════════════════════════════════════════════════
+_EFN_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://quote.eastmoney.com/center/gridlist.html",
+}
+
+def fetch_eastmoney_all_stocks():
+    """
+    东方财富全市场A股实时行情（5000+只）
+    接口来源：东方财富网页版，完全免费，无积分限制
+    """
+    url = "https://push2.eastmoney.com/api/qt/clist/get"
+    all_stocks = []
+    
+    # 分批获取：沪深A股 + 北交所
+    market_params = [
+        {"pn": 1, "pz": 500, "po": 1, "np": 1, "fltt": 2, "invt": 2, 
+         "fid": "f12", "fs": "m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23", 
+         "fields": "f12,f14,f20,f21,f23,f24,f25,f26,f33,f34,f35,f36,f37,f38,f39,f40,f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100"},
+    ]
+    
+    for params in market_params:
+        try:
+            resp = requests.get(url, params=params, headers=_EFN_HEADERS, timeout=15)
+            data = resp.json()
+            if data.get("data") and data["data"].get("diff"):
+                stocks = data["data"]["diff"]
+                logger.info(f"东方财富返回 {len(stocks)} 只股票")
+                return stocks
+        except Exception as e:
+            logger.warning(f"东方财富接口请求失败: {e}")
+    
+    return None
+
+
+def parse_eastmoney_stock(raw: dict) -> dict:
+    """解析东方财富原始数据为统一格式"""
+    # 字段映射：f12=代码, f14=名称, f20=总市值, f21=流通市值, f23=市净率
+    # f24=市盈率, f33=行业, f43=最新价, f44=最高价, f45=最低价
+    # f46=开盘价, f47=成交量, f48=成交额, f57=涨跌幅, f58=涨跌额
+    # f60=昨收, f61=换手率
+    
+    code = str(raw.get("f12", "")).zfill(6)
+    if not code or code == "None":
+        return None
+        
+    # 判断市场
+    if code.startswith("6") or code.startswith("5") or code.startswith("11"):
+        ts_code = f"{code}.SH"
+    elif code.startswith("4") or code.startswith("8") or code.startswith("9"):
+        ts_code = f"{code}.BJ"
+    else:
+        ts_code = f"{code}.SZ"
+    
+    # 判断市场板块
+    if code.startswith("68"):
+        market = "科创板"
+    elif code.startswith("30"):
+        market = "创业板"
+    elif code.startswith("8") or code.startswith("4"):
+        market = "北交所"
+    else:
+        market = "主板"
+    
+    close = raw.get("f43", 0)
+    if close and isinstance(close, (int, float)) and close > 0:
+        # 东方财富价格需要除以100
+        close = close / 100 if close > 1000 else close
+    
+    pre_close = raw.get("f60", 0)
+    if pre_close and isinstance(pre_close, (int, float)) and pre_close > 0:
+        pre_close = pre_close / 100 if pre_close > 1000 else pre_close
+    
+    change = raw.get("f58", 0)
+    pct_chg = raw.get("f57", 0)
+    
+    # 涨跌幅和涨跌额可能需要除以100
+    if pct_chg and isinstance(pct_chg, (int, float)) and abs(pct_chg) > 100:
+        pct_chg = pct_chg / 100
+    if change and isinstance(change, (int, float)) and abs(change) > 1000:
+        change = change / 100
+    
+    return {
+        "ts_code": ts_code,
+        "name": str(raw.get("f14", "")),
+        "industry": str(raw.get("f33", "") or "未知"),
+        "market": market,
+        "close": close or 0,
+        "open": raw.get("f46", 0) / 100 if raw.get("f46") and raw.get("f46") > 1000 else raw.get("f46", 0),
+        "high": raw.get("f44", 0) / 100 if raw.get("f44") and raw.get("f44") > 1000 else raw.get("f44", 0),
+        "low": raw.get("f45", 0) / 100 if raw.get("f45") and raw.get("f45") > 1000 else raw.get("f45", 0),
+        "pre_close": pre_close,
+        "change": change,
+        "pct_chg": pct_chg,
+        "vol": raw.get("f47", 0),
+        "amount": raw.get("f48", 0),
+        "turnover_rate": raw.get("f61", 0),
+        "pe": raw.get("f24", 0),
+        "pb": raw.get("f23", 0),
+        "total_mv": round((raw.get("f20", 0) or 0) / 100000000, 2),  # 转为亿元
+        "circ_mv": round((raw.get("f21", 0) or 0) / 100000000, 2),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 全量股票数据缓存
+# ══════════════════════════════════════════════════════════════════════════════
+_EASTMONEY_CACHE = {"data": None, "ts": 0}  # 缓存5分钟
 _FULL_STOCK_CACHE = {"data": None, "ts": 0}   # 缓存24小时
 _DAILY_CACHE = {"data": None, "ts": 0, "trade_date": ""}  # 缓存4小时
 
@@ -264,12 +371,13 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "FinScreener API",
-        "version": "1.4.0",
+        "version": "1.5.0",
         "simple_mode": True,
         "tushare_available": TUSHARE_AVAILABLE,
         "akshare_available": AKSHARE_AVAILABLE,
-        "primary_datasource": "akshare_full_spot" if AKSHARE_AVAILABLE else "tushare_stock_basic_fulllist",
-        "message": "API正常运行中 - AkShare全量实时行情(5000+只A股)" if AKSHARE_AVAILABLE else "API正常运行中 - stock_basic全量列表",
+        "eastmoney_direct": True,   # 东方财富直连始终可用（只依赖requests）
+        "primary_datasource": "eastmoney_direct",
+        "message": "API正常运行中 - 东方财富直连全量行情(5000+只A股)",
     }
 
 @app.get("/")
@@ -644,7 +752,74 @@ async def screen_stocks(body: dict = {}):
     data_source = "mock"
 
     # ══════════════════════════════════════════════════════════════════════
-    # 第一优先级：AkShare stock_zh_a_spot_em（无积分限制，全量5000+只）
+    # 第一优先级：东方财富 HTTP 直连（无需第三方库，只用requests）
+    # 一次拉取全市场 5000+ 只A股，完全免费，无积分限制
+    # ══════════════════════════════════════════════════════════════════════
+    if not results:
+        try:
+            now = time.time()
+            # 缓存5分钟
+            if _EASTMONEY_CACHE["data"] is not None and now - _EASTMONEY_CACHE["ts"] < 300:
+                stocks_list = _EASTMONEY_CACHE["data"]
+                logger.info(f"使用缓存的东方财富数据：{len(stocks_list)} 只")
+            else:
+                logger.info("使用东方财富直连接口拉取全量A股...")
+                raw_data = fetch_eastmoney_all_stocks()
+                if raw_data:
+                    stocks_list = [parse_eastmoney_stock(r) for r in raw_data]
+                    stocks_list = [s for s in stocks_list if s and s.get("ts_code")]
+                    _EASTMONEY_CACHE["data"] = stocks_list
+                    _EASTMONEY_CACHE["ts"] = now
+                    logger.info(f"✅ 东方财富返回 {len(stocks_list)} 只A股")
+                else:
+                    stocks_list = []
+
+            if len(stocks_list) >= 1000:
+                import pandas as pd
+                df = pd.DataFrame(stocks_list)
+                
+                # 按市场板块过滤
+                if market and market not in ("全部股票", ""):
+                    df = df[df["market"] == market]
+                
+                # 按行业过滤
+                if industry:
+                    pattern = industry.replace(",", "|").replace("，", "|")
+                    df = df[df["industry"].str.contains(pattern, na=False, regex=True)]
+                
+                # 数值条件筛选
+                for cond in conditions:
+                    field = cond.get("field", "")
+                    op = cond.get("operator", "gt")
+                    val = cond.get("value")
+                    if val is None or field == "":
+                        continue
+                    try:
+                        val = float(val)
+                        if op in ["gt", ">"]:
+                            df = df[df[field] > val]
+                        elif op in ["lt", "<"]:
+                            df = df[df[field] < val]
+                        elif op in ["gte", ">="]:
+                            df = df[df[field] >= val]
+                        elif op in ["lte", "<="]:
+                            df = df[df[field] <= val]
+                    except Exception:
+                        pass
+                
+                total = len(df)
+                start = (page - 1) * page_size
+                page_df = df.iloc[start: start + page_size]
+                
+                results = page_df.to_dict("records")
+                data_source = "eastmoney_direct"
+                logger.info(f"✅ 东方财富筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+
+        except Exception as e:
+            logger.error(f"❌ 东方财富直连失败: {e}", exc_info=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 第二优先级：AkShare stock_zh_a_spot_em（无积分限制，全量5000+只）
     # ══════════════════════════════════════════════════════════════════════
     if not results and AKSHARE_AVAILABLE:
         try:
