@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Filter, X, Save, Upload, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import ScreeningPanel from '@/components/ScreeningPanel'
-import StockTable from '@/components/StockTable'
+import { ScreeningPanel } from '@/components/ScreeningPanel'
+import { StockTable } from '@/components/StockTable'
 
 const ScreenerPage = () => {
   const [conditions, setConditions] = useState<any[]>([])
