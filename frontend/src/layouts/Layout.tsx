@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { 
   Menu, X, BarChart3, Filter, Search, Bell, 
@@ -8,6 +8,7 @@ import { cn } from '@/utils/cn'
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
 
   const navigation = [
     { name: '首页', href: '/', icon: Home },
@@ -94,14 +95,18 @@ const Layout = () => {
             {navigation.map((item) => {
               const Icon = item.icon
               return (
-                <a
+                <Link
                   key={item.name}
-                  href={item.href}
-                  className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900"
+                  to={item.href}
+                  onClick={() => setSidebarOpen(false)}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-700 hover:text-gray-900",
+                    location.pathname === item.href ? "bg-blue-50 text-blue-600" : "hover:bg-gray-100"
+                  )}
                 >
                   <Icon size={20} />
                   <span>{item.name}</span>
-                </a>
+                </Link>
               )
             })}
           </nav>
@@ -122,16 +127,16 @@ const Layout = () => {
               { name: '科创板', count: 800 },
               { name: '北交所', count: 300 },
             ].map((market) => (
-              <a
+              <Link
                 key={market.name}
-                href={`/market/${market.name}`}
+                to={`/market/${market.name}`}
                 className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 group"
               >
                 <span>{market.name}</span>
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                   {market.count}
                 </span>
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -139,13 +144,13 @@ const Layout = () => {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">热门行业</h2>
             <div className="mt-2 space-y-1">
               {['电子', '医药生物', '计算机', '新能源', '消费'].map((industry) => (
-                <a
+                <Link
                   key={industry}
-                  href={`/industry/${industry}`}
+                  to={`/industry/${industry}`}
                   className="block px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900"
                 >
                   {industry}
-                </a>
+                </Link>
               ))}
             </div>
           </div>
@@ -163,17 +168,17 @@ const Layout = () => {
             <nav className="flex" aria-label="Breadcrumb">
               <ol className="inline-flex items-center space-x-1 md:space-x-3">
                 <li className="inline-flex items-center">
-                  <a href="/" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700">
+                  <Link to="/" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700">
                     <Home className="w-4 h-4 mr-2" />
                     首页
-                  </a>
+                  </Link>
                 </li>
                 <li>
                   <div className="flex items-center">
                     <span className="mx-2 text-gray-400">/</span>
-                    <a href="/screener" className="ml-1 text-sm font-medium text-gray-500 hover:text-gray-700 md:ml-2">
+                    <Link to="/screener" className="ml-1 text-sm font-medium text-gray-500 hover:text-gray-700 md:ml-2">
                       股票筛选
-                    </a>
+                    </Link>
                   </div>
                 </li>
               </ol>
