@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinScreener 终极部署方案</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .emoji {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            padding: 25px;
+            background: #f7fafc;
+            border-radius: 15px;
+            border-left: 5px solid #4299e1;
+        }
+        
+        .section h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .step {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-left: 4px solid #68d391;
+        }
+        
+        .step-number {
+            display: inline-block;
+            background: #4299e1;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 36px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .deploy-button {
+            display: block;
+            background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+            color: white;
+            text-decoration: none;
+            padding: 20px 40px;
+            border-radius: 12px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            text-align: center;
+            margin: 30px auto;
+            max-width: 500px;
+            box-shadow: 0 10px 30px rgba(56, 161, 105, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        .deploy-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(56, 161, 105, 0.6);
+        }
+        
+        .env-vars {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+        }
+        
+        .env-var {
+            padding: 8px 0;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        .env-var:last-child {
+            border-bottom: none;
+        }
+        
+        .note {
+            background: #fff5f5;
+            border-left: 5px solid #fc8181;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .success {
+            background: #f0fff4;
+            border-left: 5px solid #68d391;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .code {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            background: #f7fafc;
+            color: #718096;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="emoji">🚀</div>
+            <h1>FinScreener Railway 终极部署</h1>
+            <p>Leo先生，我已为你准备好一切，只需点击一次即可开始部署</p>
+        </div>
+        
+        <div class="content">
+            <div class="section">
+                <h2>🎯 简单三步完成部署</h2>
+                
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <strong>点击下方的一键部署按钮</strong>
+                    <p>这会打开Railway部署页面，所有配置都已预填好</p>
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <strong>登录并授权</strong>
+                    <p>用GitHub登录，授权Railway访问你的仓库</p>
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <strong>等待部署完成</strong>
+                    <p>Railway会自动完成所有工作，大约需要2-3分钟</p>
+                </div>
+                
+                <a href="https://railway.app/new?template=python&env=TUSHARE_TOKEN%3D13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96%26AI_PROVIDER%3Dmock%26ENVIRONMENT%3Dproduction%26CORS_ORIGINS%3Dhttps%3A%2F%2Ffinscreener.vercel.app%2Chttp%3A%2F%2Flocalhost%3A3000%26LOG_LEVEL%3DINFO%26CACHE_TTL%3D300" 
+                   target="_blank" class="deploy-button">
+                   🚀 点击这里一键部署到Railway
+                </a>
+            </div>
+            
+            <div class="section">
+                <h2>🔧 预配置的环境变量</h2>
+                <p>我已经在部署链接中配置了所有必要的环境变量：</p>
+                
+                <div class="env-vars">
+                    <div class="env-var">TUSHARE_TOKEN=13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96</div>
+                    <div class="env-var">AI_PROVIDER=mock</div>
+                    <div class="env-var">ENVIRONMENT=production</div>
+                    <div class="env-var">CORS_ORIGINS=https://finscreener.vercel.app,http://localhost:3000</div>
+                    <div class="env-var">LOG_LEVEL=INFO</div>
+                    <div class="env-var">CACHE_TTL=300</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>📋 部署后操作</h2>
+                
+                <div class="success">
+                    <h3>✅ 部署成功后需要做的：</h3>
+                    <ol>
+                        <li>在Railway项目页面找到 <strong>Production Domain</strong></li>
+                        <li>复制这个URL（格式类似：<code>https://finscreener-xxxxx.up.railway.app</code>）</li>
+                        <li>保存这个URL，部署Vercel前端时需要</li>
+                        <li>告诉我你的Railway URL，我帮你验证部署</li>
+                    </ol>
+                </div>
+                
+                <div class="note">
+                    <h3>⚠️ 重要提醒：</h3>
+                    <ul>
+                        <li>确保GitHub仓库是公开的</li>
+                        <li>部署过程中不要关闭浏览器</li>
+                        <li>如果部署失败，刷新页面重试</li>
+                        <li>保存好Railway URL</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>🔍 验证部署是否成功</h2>
+                <p>部署完成后，你可以测试以下端点：</p>
+                
+                <div class="code">
+                    # 健康检查
+                    {你的RailwayURL}/health
+                    
+                    # API文档
+                    {你的RailwayURL}/docs
+                    
+                    # 股票数据测试
+                    {你的RailwayURL}/api/stocks/list?limit=10
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>📞 遇到问题？</h2>
+                <p>如果部署过程中遇到任何问题：</p>
+                <ol>
+                    <li>截图错误信息给我看</li>
+                    <li>告诉我你在哪一步卡住了</li>
+                    <li>我会立即为你提供解决方案</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>FinScreener 智能股票筛选工具 | 版本 1.0.0</p>
+            <p>技术支持：皮卡丘 ⚡ (Leo先生的专属AI助手)</p>
+            <p>GitHub: aleilo199607-ctrl/finscreener</p>
+        </div>
+    </div>
+    
+    <script>
+        // 自动滚动到部署按钮
+        window.onload = function() {
+            const deployButton = document.querySelector('.deploy-button');
+            if (deployButton) {
+                deployButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        };
+    </script>
+</body>
+</html>
