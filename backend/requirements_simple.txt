@@ -12,3 +12,6 @@ numpy>=1.26.2
 # 工具
 python-dotenv==1.0.0
 requests==2.31.0
+
+# Yahoo Finance数据源
+yfinance>=0.2.28

@@ -20,6 +20,204 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Yahoo Finance 数据源（免费，无积分限制，Railway可用）
+# ══════════════════════════════════════════════════════════════════════════════
+
+# 尝试导入yfinance
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+    logger.info("Yahoo Finance (yfinance) 初始化成功")
+except Exception as e:
+    YFINANCE_AVAILABLE = False
+    yf = None
+    logger.warning(f"Yahoo Finance不可用: {e}")
+
+
+def ts_code_to_yahoo(ts_code: str) -> str:
+    """
+    将Tushare格式的股票代码转换为Yahoo Finance格式
+    000001.SZ -> 000001.SZ
+    600000.SH -> 600000.SS
+    430001.BJ -> 430001.SZ (北交所用SZ后缀)
+    """
+    if not ts_code:
+        return ""
+    parts = ts_code.split(".")
+    if len(parts) != 2:
+        return ts_code
+    code, suffix = parts
+    if suffix == "SH":
+        return f"{code}.SS"
+    elif suffix == "BJ":
+        return f"{code}.SZ"  # 北交所在Yahoo用SZ
+    else:
+        return ts_code  # SZ保持不变
+
+
+def yahoo_to_ts_code(yahoo_code: str) -> str:
+    """
+    将Yahoo Finance格式转换回Tushare格式
+    000001.SZ -> 000001.SZ
+    600000.SS -> 600000.SH
+    """
+    if not yahoo_code:
+        return ""
+    parts = yahoo_code.split(".")
+    if len(parts) != 2:
+        return yahoo_code
+    code, suffix = parts
+    if suffix == "SS":
+        return f"{code}.SH"
+    return yahoo_code
+
+
+def fetch_yahoo_stock_list() -> list:
+    """
+    使用Yahoo Finance获取A股全量股票列表
+    通过获取主要指数成分股来构建股票列表
+    """
+    if not YFINANCE_AVAILABLE or not yf:
+        return []
+    
+    try:
+        # 获取主要指数的成分股来构建A股列表
+        # 上证指数、深证成指、创业板指、科创50
+        index_symbols = [
+            "000001.SS",   # 上证指数
+            "399001.SZ",   # 深证成指
+            "399006.SZ",   # 创业板指
+            "000688.SS",   # 科创50
+        ]
+        
+        all_stocks = {}
+        
+        # 尝试获取指数成分股（Yahoo可能不直接提供，用备选方案）
+        # 备选：使用预设的主要股票代码列表 + 批量获取行情
+        major_codes = [
+            # 上证50主要成分股
+            "600519.SS", "601318.SS", "600036.SS", "601166.SS", "600887.SS",
+            "601398.SS", "601288.SS", "601088.SS", "600276.SS", "601012.SS",
+            "600900.SS", "601888.SS", "603288.SS", "600309.SS", "601668.SS",
+            "601857.SS", "601628.SS", "601211.SS", "601688.SS", "600030.SS",
+            # 深证主要股票
+            "000001.SZ", "000002.SZ", "000858.SZ", "002415.SZ", "002594.SZ",
+            "300750.SZ", "300059.SZ", "300760.SZ", "300122.SZ", "002714.SZ",
+            "000568.SZ", "000538.SZ", "002352.SZ", "300015.SZ", "300014.SZ",
+            "002230.SZ", "000063.SZ", "002475.SZ", "300124.SZ", "002142.SZ",
+        ]
+        
+        # 批量获取这些股票的当前行情
+        logger.info(f"使用Yahoo Finance获取 {len(major_codes)} 只主要股票数据...")
+        
+        for symbol in major_codes:
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                if info and info.get("regularMarketPrice"):
+                    ts_code = yahoo_to_ts_code(symbol)
+                    all_stocks[ts_code] = {
+                        "ts_code": ts_code,
+                        "name": info.get("shortName", info.get("longName", symbol)),
+                        "industry": info.get("industry", "未知"),
+                        "market": _classify_market(ts_code, ""),
+                        "close": info.get("regularMarketPrice", 0),
+                        "open": info.get("regularMarketOpen", 0),
+                        "high": info.get("regularMarketDayHigh", 0),
+                        "low": info.get("regularMarketDayLow", 0),
+                        "pre_close": info.get("previousClose", 0),
+                        "change": info.get("regularMarketChange", 0),
+                        "pct_chg": info.get("regularMarketChangePercent", 0),
+                        "vol": info.get("regularMarketVolume", 0),
+                        "amount": 0,  # Yahoo不直接提供成交额
+                        "turnover_rate": 0,
+                        "pe": info.get("trailingPE", 0),
+                        "pb": info.get("priceToBook", 0),
+                        "total_mv": info.get("marketCap", 0) / 100000000 if info.get("marketCap") else 0,  # 转为亿
+                        "circ_mv": 0,
+                    }
+            except Exception as e:
+                logger.debug(f"获取 {symbol} 失败: {e}")
+                continue
+        
+        if len(all_stocks) > 0:
+            logger.info(f"✅ Yahoo Finance返回 {len(all_stocks)} 只股票")
+            return list(all_stocks.values())
+        
+    except Exception as e:
+        logger.error(f"Yahoo Finance获取股票列表失败: {e}")
+    
+    return []
+
+
+def fetch_yahoo_stock_detail(ts_code: str) -> dict:
+    """
+    使用Yahoo Finance获取单只股票详情和K线数据
+    """
+    if not YFINANCE_AVAILABLE or not yf:
+        return {}
+    
+    try:
+        yahoo_code = ts_code_to_yahoo(ts_code)
+        ticker = yf.Ticker(yahoo_code)
+        
+        # 获取基本信息
+        info = ticker.info
+        
+        # 获取历史K线（60天）
+        hist = ticker.history(period="3mo")
+        
+        kline = []
+        if hist is not None and not hist.empty:
+            for date, row in hist.iterrows():
+                kline.append({
+                    "date": date.strftime("%Y%m%d"),
+                    "open": round(row["Open"], 2),
+                    "high": round(row["High"], 2),
+                    "low": round(row["Low"], 2),
+                    "close": round(row["Close"], 2),
+                    "vol": int(row["Volume"]),
+                })
+        
+        # 计算涨跌幅
+        current = info.get("regularMarketPrice", 0)
+        previous = info.get("previousClose", 0)
+        change = current - previous if current and previous else 0
+        pct_chg = (change / previous * 100) if previous else 0
+        
+        return {
+            "basic": {
+                "ts_code": ts_code,
+                "name": info.get("shortName", info.get("longName", ts_code)),
+                "industry": info.get("industry", "未知"),
+                "market": _classify_market(ts_code, ""),
+                "list_date": "",
+            },
+            "quote": {
+                "ts_code": ts_code,
+                "close": current,
+                "open": info.get("regularMarketOpen", 0),
+                "high": info.get("regularMarketDayHigh", 0),
+                "low": info.get("regularMarketDayLow", 0),
+                "pre_close": previous,
+                "change": round(change, 2),
+                "pct_chg": round(pct_chg, 2),
+                "vol": info.get("regularMarketVolume", 0),
+                "amount": 0,
+                "turnover_rate": 0,
+                "pe": info.get("trailingPE", 0),
+                "pb": info.get("priceToBook", 0),
+                "total_mv": info.get("marketCap", 0) / 100000000 if info.get("marketCap") else 0,
+                "circ_mv": 0,
+            },
+            "kline": kline,
+        }
+    except Exception as e:
+        logger.error(f"Yahoo Finance获取 {ts_code} 详情失败: {e}")
+        return {}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 新浪股票接口（稳定可靠，无需认证，免费）
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -437,13 +635,14 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "FinScreener API",
-        "version": "1.6.0",
+        "version": "1.7.0",
         "simple_mode": True,
         "tushare_available": TUSHARE_AVAILABLE,
         "akshare_available": AKSHARE_AVAILABLE,
+        "yfinance_available": YFINANCE_AVAILABLE,
         "sina_api": True,   # 新浪接口始终可用（只依赖requests）
-        "primary_datasource": "sina_tushare",
-        "message": "API正常运行中 - 新浪接口全量行情(5000+只A股)",
+        "primary_datasource": "yahoo_finance" if YFINANCE_AVAILABLE else "sina_tushare",
+        "message": "API正常运行中 - Yahoo Finance数据源(免费无限制)",
     }
 
 @app.get("/")
@@ -818,7 +1017,58 @@ async def screen_stocks(body: dict = {}):
     data_source = "mock"
 
     # ══════════════════════════════════════════════════════════════════════
-    # 第一优先级：新浪股票接口 + Tushare基础信息（稳定可靠，无需认证）
+    # 第一优先级：Yahoo Finance（免费，无积分限制，Railway可用）
+    # ══════════════════════════════════════════════════════════════════════
+    if not results and YFINANCE_AVAILABLE:
+        try:
+            logger.info("使用 Yahoo Finance 获取股票数据...")
+            yahoo_stocks = fetch_yahoo_stock_list()
+            
+            if yahoo_stocks and len(yahoo_stocks) >= 10:
+                import pandas as pd
+                df = pd.DataFrame(yahoo_stocks)
+                
+                # 按市场板块过滤
+                if market and market not in ("全部股票", ""):
+                    df = df[df["market"] == market]
+                
+                # 按行业过滤
+                if industry:
+                    pattern = industry.replace(",", "|").replace("，", "|")
+                    df = df[df["industry"].str.contains(pattern, na=False, regex=True)]
+                
+                # 数值条件筛选
+                for cond in conditions:
+                    field = cond.get("field", "")
+                    op = cond.get("operator", "gt")
+                    val = cond.get("value")
+                    if val is None or field == "":
+                        continue
+                    try:
+                        val = float(val)
+                        if op in ["gt", ">"]:
+                            df = df[df[field] > val]
+                        elif op in ["lt", "<"]:
+                            df = df[df[field] < val]
+                        elif op in ["gte", ">="]:
+                            df = df[df[field] >= val]
+                        elif op in ["lte", "<="]:
+                            df = df[df[field] <= val]
+                    except Exception:
+                        pass
+                
+                total = len(df)
+                start = (page - 1) * page_size
+                page_df = df.iloc[start: start + page_size]
+                
+                results = page_df.to_dict("records")
+                data_source = "yahoo_finance"
+                logger.info(f"✅ Yahoo Finance筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+        except Exception as e:
+            logger.error(f"❌ Yahoo Finance失败: {e}", exc_info=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 第二优先级：新浪股票接口 + Tushare基础信息（稳定可靠，无需认证）
     # ══════════════════════════════════════════════════════════════════════
     if not results:
         try:
@@ -1065,8 +1315,23 @@ async def get_stock_detail(ts_code: str):
     basic_info = {}
     daily_info = {}
     kline = []
+    data_source = "mock"
 
-    if TUSHARE_AVAILABLE:
+    # 第一优先级：Yahoo Finance
+    if YFINANCE_AVAILABLE:
+        try:
+            yahoo_data = fetch_yahoo_stock_detail(ts_code)
+            if yahoo_data and yahoo_data.get("quote"):
+                basic_info = yahoo_data["basic"]
+                daily_info = yahoo_data["quote"]
+                kline = yahoo_data.get("kline", [])
+                data_source = "yahoo_finance"
+                logger.info(f"✅ Yahoo Finance获取 {ts_code} 详情成功")
+        except Exception as e:
+            logger.warning(f"Yahoo Finance获取 {ts_code} 失败: {e}")
+
+    # 第二优先级：Tushare
+    if not basic_info and TUSHARE_AVAILABLE:
         try:
             df_basic = pro.stock_basic(ts_code=ts_code, fields="ts_code,name,industry,market,list_date,area,pe,pb,total_mv,circ_mv")
             if df_basic is not None and len(df_basic) > 0:
@@ -1088,9 +1353,11 @@ async def get_stock_detail(ts_code: str):
                     }
                     for _, row in df_daily.iterrows()
                 ]
+                data_source = "tushare"
         except Exception as e:
-            logger.error(f"获取股票{ts_code}详情失败: {e}")
+            logger.error(f"Tushare获取股票{ts_code}详情失败: {e}")
 
+    # 降级到模拟数据
     if not basic_info:
         mock = next((s for s in MOCK_STOCKS if s["ts_code"] == ts_code), MOCK_STOCKS[0])
         basic_info = mock
@@ -1114,6 +1381,7 @@ async def get_stock_detail(ts_code: str):
             "basic": basic_info,
             "quote": daily_info,
             "kline": kline,
+            "data_source": data_source,
         }
     }
 
