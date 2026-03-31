@@ -97,6 +97,18 @@ except Exception as e:
     pro = None
     logger.warning(f"Tushare不可用，将使用模拟数据: {e}")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 尝试导入AkShare（用于获取全量A股实时行情 - 无积分限制）
+# ══════════════════════════════════════════════════════════════════════════════
+try:
+    import akshare as ak
+    AKSHARE_AVAILABLE = True
+    logger.info("AkShare 初始化成功")
+except Exception as e:
+    AKSHARE_AVAILABLE = False
+    ak = None
+    logger.warning(f"AkShare不可用: {e}")
+
 # 创建FastAPI应用
 app = FastAPI(
     title="FinScreener API",
@@ -252,13 +264,12 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "FinScreener API",
-        "version": "1.2.0",
+        "version": "1.4.0",
         "simple_mode": True,
         "tushare_available": TUSHARE_AVAILABLE,
         "akshare_available": AKSHARE_AVAILABLE,
-        "eastmoney_direct": True,   # 东方财富直连始终可用（只依赖 requests）
-        "primary_datasource": "eastmoney_direct",
-        "message": "API正常运行中 - 已使用东方财富直连接口（5000+ 只 A 股）",
+        "primary_datasource": "akshare_full_spot" if AKSHARE_AVAILABLE else "tushare_stock_basic_fulllist",
+        "message": "API正常运行中 - AkShare全量实时行情(5000+只A股)" if AKSHARE_AVAILABLE else "API正常运行中 - stock_basic全量列表",
     }
 
 @app.get("/")
@@ -633,77 +644,7 @@ async def screen_stocks(body: dict = {}):
     data_source = "mock"
 
     # ══════════════════════════════════════════════════════════════════════
-    # 第一优先级：Tushare stock_basic（全量 5000+ 只，不受积分限制）
-    # + daily/daily_basic 行情样本（数量有限，仅用于有行情数据的股票展示）
-    # total = 全量过滤后真实数量；价格字段对有行情记录的股票显示真实值
-    # ══════════════════════════════════════════════════════════════════════
-    if not results and TUSHARE_AVAILABLE:
-        try:
-            import pandas as pd
-
-            # 1. 全量股票名单
-            df_full = _get_full_stock_list(pro)
-            if df_full is not None and len(df_full) >= 100:
-                df_full = df_full.copy()
-                df_full["market"] = df_full.apply(
-                    lambda r: _classify_market(r["ts_code"], r.get("market", "")), axis=1
-                )
-                df_full["industry"] = df_full.get("industry", pd.Series("未知", index=df_full.index)).fillna("未知")
-
-                # 2. 行情样本（有限条数，仅补充价格字段）
-                df_sample = None
-                for td_offset in range(8):
-                    td = get_trade_date(-td_offset)
-                    s = _get_daily_sample(pro, td)
-                    if s is not None and len(s) > 0:
-                        df_sample = s
-                        trade_date = td
-                        break
-
-                # 3. 合并：行情样本 left join 全量列表
-                if df_sample is not None:
-                    # daily_basic 字段处理：可能存在后缀冲突，先统一
-                    daily_cols = [c for c in ["close", "open", "high", "low", "pre_close",
-                                              "change", "pct_chg", "vol", "amount",
-                                              "turnover_rate", "pe", "pb", "total_mv", "circ_mv"]
-                                  if c in df_sample.columns]
-                    df_sample_slim = df_sample[["ts_code"] + daily_cols].copy()
-
-                    merged = df_full.merge(df_sample_slim, on="ts_code", how="left")
-                else:
-                    merged = df_full.copy()
-                    for col in ["close", "open", "high", "low", "pre_close",
-                                "change", "pct_chg", "vol", "amount",
-                                "turnover_rate", "pe", "pb", "total_mv", "circ_mv"]:
-                        merged[col] = None
-
-                # 4. 对无行情数据的股票，生成估算行情（避免前端显示空白）
-                no_price = merged["close"].isna()
-                if no_price.any():
-                    n = no_price.sum()
-                    rng = random.Random(42)  # 固定种子，保证同一股票价格稳定
-                    merged.loc[no_price, "close"] = [rng.uniform(3, 200) for _ in range(n)]
-                    merged.loc[no_price, "pct_chg"] = [rng.uniform(-5, 5) for _ in range(n)]
-                    merged.loc[no_price, "change"] = merged.loc[no_price, "close"] * merged.loc[no_price, "pct_chg"] / 100
-                    merged.loc[no_price, "vol"] = [rng.randint(100000, 10000000) for _ in range(n)]
-                    merged.loc[no_price, "amount"] = merged.loc[no_price, "close"] * merged.loc[no_price, "vol"] / 10000
-                    merged.loc[no_price, "pe"] = [rng.uniform(5, 100) for _ in range(n)]
-                    merged.loc[no_price, "pb"] = [rng.uniform(0.5, 8) for _ in range(n)]
-                    merged.loc[no_price, "turnover_rate"] = [rng.uniform(0.1, 10) for _ in range(n)]
-                    merged.loc[no_price, "total_mv"] = merged.loc[no_price, "close"] * rng.randint(5000, 50000) * 10000 / 10000
-                    merged.loc[no_price, "circ_mv"] = merged.loc[no_price, "total_mv"] * 0.7
-
-                results, total = _apply_filters_and_paginate(
-                    merged, conditions, market, industry, page, page_size, trade_date, "tushare_full"
-                )
-                data_source = "tushare_full"
-                logger.info(f"全量列表筛选完成：总计 {total} 条（来自 {len(merged)} 只股票），返回第 {page} 页 {len(results)} 条")
-
-        except Exception as e:
-            logger.error(f"全量列表方案失败: {e}", exc_info=True)
-
-    # ══════════════════════════════════════════════════════════════════════
-    # 第二优先级：AkShare stock_zh_a_spot_em（安装成功时使用）
+    # 第一优先级：AkShare stock_zh_a_spot_em（无积分限制，全量5000+只）
     # ══════════════════════════════════════════════════════════════════════
     if not results and AKSHARE_AVAILABLE:
         try:
@@ -750,6 +691,8 @@ async def screen_stocks(body: dict = {}):
 
                 df_spot["market"] = df_spot["ts_code"].apply(lambda c: _classify_market(c, ""))
                 df_spot["industry"] = "未知"
+                
+                # 尝试用Tushare补充行业信息
                 if TUSHARE_AVAILABLE:
                     try:
                         df_basic_ind = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
@@ -773,19 +716,83 @@ async def screen_stocks(body: dict = {}):
                     df_spot, conditions, market, industry, page, page_size, trade_date, "akshare"
                 )
                 data_source = "akshare"
-                logger.info(f"AkShare 筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+                logger.info(f"✅ AkShare 筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
 
         except Exception as e:
-            logger.error(f"AkShare 筛选失败: {e}", exc_info=True)
+            logger.error(f"❌ AkShare 筛选失败: {e}", exc_info=True)
 
+    # ══════════════════════════════════════════════════════════════════════
+    # 第二优先级：Tushare stock_basic（全量 5000+ 只基础信息）
+    # + daily/daily_basic 行情样本（数量有限，仅用于有行情数据的股票展示）
+    # ══════════════════════════════════════════════════════════════════════
+    if not results and TUSHARE_AVAILABLE:
+        try:
+            import pandas as pd
 
-    # ── 降级模拟数据（仅当 Tushare 完全不可用时兜底）──────────────────────
+            # 1. 全量股票名单
+            df_full = _get_full_stock_list(pro)
+            if df_full is not None and len(df_full) >= 100:
+                df_full = df_full.copy()
+                df_full["market"] = df_full.apply(
+                    lambda r: _classify_market(r["ts_code"], r.get("market", "")), axis=1
+                )
+                df_full["industry"] = df_full.get("industry", pd.Series("未知", index=df_full.index)).fillna("未知")
+
+                # 2. 行情样本（有限条数，仅补充价格字段）
+                df_sample = None
+                for td_offset in range(8):
+                    td = get_trade_date(-td_offset)
+                    s = _get_daily_sample(pro, td)
+                    if s is not None and len(s) > 0:
+                        df_sample = s
+                        trade_date = td
+                        break
+
+                # 3. 合并：行情样本 left join 全量列表
+                if df_sample is not None:
+                    daily_cols = [c for c in ["close", "open", "high", "low", "pre_close",
+                                              "change", "pct_chg", "vol", "amount",
+                                              "turnover_rate", "pe", "pb", "total_mv", "circ_mv"]
+                                  if c in df_sample.columns]
+                    df_sample_slim = df_sample[["ts_code"] + daily_cols].copy()
+                    merged = df_full.merge(df_sample_slim, on="ts_code", how="left")
+                else:
+                    merged = df_full.copy()
+                    for col in ["close", "open", "high", "low", "pre_close",
+                                "change", "pct_chg", "vol", "amount",
+                                "turnover_rate", "pe", "pb", "total_mv", "circ_mv"]:
+                        merged[col] = None
+
+                # 4. 对无行情数据的股票，生成估算行情（避免前端显示空白）
+                no_price = merged["close"].isna()
+                if no_price.any():
+                    n = no_price.sum()
+                    rng = random.Random(42)
+                    merged.loc[no_price, "close"] = [rng.uniform(3, 200) for _ in range(n)]
+                    merged.loc[no_price, "pct_chg"] = [rng.uniform(-5, 5) for _ in range(n)]
+                    merged.loc[no_price, "change"] = merged.loc[no_price, "close"] * merged.loc[no_price, "pct_chg"] / 100
+                    merged.loc[no_price, "vol"] = [rng.randint(100000, 10000000) for _ in range(n)]
+                    merged.loc[no_price, "amount"] = merged.loc[no_price, "close"] * merged.loc[no_price, "vol"] / 10000
+                    merged.loc[no_price, "pe"] = [rng.uniform(5, 100) for _ in range(n)]
+                    merged.loc[no_price, "pb"] = [rng.uniform(0.5, 8) for _ in range(n)]
+                    merged.loc[no_price, "turnover_rate"] = [rng.uniform(0.1, 10) for _ in range(n)]
+                    merged.loc[no_price, "total_mv"] = merged.loc[no_price, "close"] * rng.randint(5000, 50000) * 10000 / 10000
+                    merged.loc[no_price, "circ_mv"] = merged.loc[no_price, "total_mv"] * 0.7
+
+                results, total = _apply_filters_and_paginate(
+                    merged, conditions, market, industry, page, page_size, trade_date, "tushare_full"
+                )
+                data_source = "tushare_full"
+                logger.info(f"Tushare全量列表筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+
+        except Exception as e:
+            logger.error(f"Tushare全量列表方案失败: {e}", exc_info=True)
+
+    # ── 降级模拟数据（仅当所有数据源都不可用时兜底）──────────────────────
     if not results:
         mock_list = [gen_mock_quote(s) for s in MOCK_STOCKS]
-        # 按 market 过滤
         if market and market not in ("全部股票", ""):
             mock_list = [s for s in mock_list if s.get("market") == market]
-        # 按 industry 过滤
         if industry:
             keywords = industry.replace(",", "|").replace("，", "|").split("|")
             mock_list = [s for s in mock_list if any(k in s.get("industry", "") for k in keywords if k)]
