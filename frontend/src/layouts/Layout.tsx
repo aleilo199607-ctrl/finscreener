@@ -13,9 +13,9 @@ const Layout = () => {
   const navigation = [
     { name: '首页', href: '/', icon: Home },
     { name: '股票筛选', href: '/screener', icon: Filter },
-    { name: '热门股票', href: '/market/hot', icon: TrendingUp },
-    { name: '市场概况', href: '/market/overview', icon: BarChart3 },
-    { name: '行业分析', href: '/industries', icon: PieChart },
+    { name: '热门股票', href: '/screener', icon: TrendingUp },
+    { name: '市场概况', href: '/screener', icon: BarChart3 },
+    { name: '行业分析', href: '/screener', icon: PieChart },
   ]
 
   return (
@@ -129,7 +129,7 @@ const Layout = () => {
             ].map((market) => (
               <Link
                 key={market.name}
-                to={`/market/${market.name}`}
+                to="/screener"
                 className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 group"
               >
                 <span>{market.name}</span>
@@ -146,7 +146,7 @@ const Layout = () => {
               {['电子', '医药生物', '计算机', '新能源', '消费'].map((industry) => (
                 <Link
                   key={industry}
-                  to={`/industry/${industry}`}
+                  to="/screener"
                   className="block px-3 py-1.5 text-sm rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900"
                 >
                   {industry}
