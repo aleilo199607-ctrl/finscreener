@@ -57,9 +57,29 @@ app.add_middleware(
 # ─── 工具函数 ─────────────────────────────────────────────────────────────────
 
 def get_trade_date(offset=0):
-    """获取交易日日期字符串，offset=-1 表示前一交易日"""
+    """
+    获取交易日日期字符串。offset=0 表示最近交易日，offset=-1 表示前一个交易日。
+    优先使用 Tushare trade_cal，失败则按自然日+周末偏移估算。
+    """
+    try:
+        if TUSHARE_AVAILABLE and pro:
+            today = datetime.now().strftime("%Y%m%d")
+            # 往前查 30 天足够覆盖节假日
+            start = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+            cal = pro.trade_cal(exchange="SSE", start_date=start, end_date=today,
+                                fields="cal_date,is_open")
+            if cal is not None and not cal.empty:
+                open_days = sorted(
+                    cal[cal["is_open"] == 1]["cal_date"].tolist(),
+                    reverse=True
+                )
+                idx = -offset  # offset=0 → open_days[0]（最近交易日）
+                if 0 <= idx < len(open_days):
+                    return open_days[idx]
+    except Exception:
+        pass
+    # 兜底：自然日 + 周末偏移
     d = datetime.now() + timedelta(days=offset)
-    # 周末往前推
     while d.weekday() >= 5:
         d -= timedelta(days=1)
     return d.strftime("%Y%m%d")
@@ -466,17 +486,34 @@ async def screen_stocks(body: dict = {}):
                 fields="ts_code,name,industry,market,list_date,exchange"
             )
 
-            # 拉取当日行情，分两批防止截断（先试当天，再试前一日）
+            # ── 分批拉取全量日行情，解决 Tushare 单次 20 条限制 ────────────────
+            # Tushare 支持 offset+limit 分页，每批最多 5000 条（受积分限制可能更少）
+            # 同时往前尝试多个交易日，防止节假日当天无数据
             df_daily = None
-            for offset in [0, -1, -2, -3]:
-                td = get_trade_date(offset)
-                try:
-                    df_daily = pro.daily(trade_date=td)
-                    if df_daily is not None and len(df_daily) >= 100:
+            trade_date = get_trade_date(0)
+            for td_offset in range(8):  # 最多往前找8个自然交易日
+                td = get_trade_date(-td_offset)
+                frames = []
+                batch_offset = 0
+                batch_size = 5000
+                while True:
+                    try:
+                        chunk = pro.daily(trade_date=td, offset=batch_offset, limit=batch_size)
+                    except Exception:
+                        break
+                    if chunk is None or chunk.empty:
+                        break
+                    frames.append(chunk)
+                    if len(chunk) < batch_size:
+                        break  # 已经是最后一批
+                    batch_offset += batch_size
+                if frames:
+                    combined = pd.concat(frames, ignore_index=True)
+                    # 全市场正常交易日应超过 1000 只，否则视为节假日/数据未就绪
+                    if len(combined) >= 200:
+                        df_daily = combined
                         trade_date = td
                         break
-                except Exception:
-                    pass
 
             if df_basic is not None and df_daily is not None and len(df_daily) > 0:
                 # 修正 market 字段（Tushare 不含科创板/北交所）
@@ -484,12 +521,36 @@ async def screen_stocks(body: dict = {}):
                     lambda r: _classify_market(r["ts_code"], r.get("market", "")), axis=1
                 )
 
+                # ── 同样分批拉取 daily_basic（pe/pb/turnover_rate/total_mv）──────
+                db_frames = []
+                db_offset = 0
+                db_size = 5000
+                while True:
+                    try:
+                        db_chunk = pro.daily_basic(
+                            trade_date=trade_date, offset=db_offset, limit=db_size,
+                            fields="ts_code,turnover_rate,pe,pb,total_mv,circ_mv"
+                        )
+                    except Exception:
+                        break
+                    if db_chunk is None or db_chunk.empty:
+                        break
+                    db_frames.append(db_chunk)
+                    if len(db_chunk) < db_size:
+                        break
+                    db_offset += db_size
+                df_daily_basic = pd.concat(db_frames, ignore_index=True) if db_frames else None
+
                 # 合并日行情与基本信息
                 merged = df_daily.merge(df_basic[["ts_code", "name", "industry", "market_clean"]], on="ts_code", how="left")
                 merged.rename(columns={"market_clean": "market"}, inplace=True)
                 merged["name"] = merged["name"].fillna(merged["ts_code"])
                 merged["industry"] = merged["industry"].fillna("未知")
                 merged["market"] = merged["market"].fillna("主板")
+
+                # 合并 daily_basic 财务指标
+                if df_daily_basic is not None and not df_daily_basic.empty:
+                    merged = merged.merge(df_daily_basic, on="ts_code", how="left")
 
                 # ── 按市场板块过滤 ──────────────────────────────────────
                 if market and market not in ("全部股票", ""):
