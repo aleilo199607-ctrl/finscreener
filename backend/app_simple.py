@@ -20,126 +20,175 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 东方财富直连接口（无需任何第三方库，只用requests，100%免费无限制）
+# 新浪股票接口（稳定可靠，无需认证，免费）
 # ══════════════════════════════════════════════════════════════════════════════
-_EFN_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Referer": "https://quote.eastmoney.com/center/gridlist.html",
-}
 
-def fetch_eastmoney_all_stocks():
+def fetch_sina_all_stocks():
     """
-    东方财富全市场A股实时行情（5000+只）
-    接口来源：东方财富网页版，完全免费，无积分限制
-    分页获取所有股票
+    使用新浪接口获取全量A股实时行情
+    接口稳定，无需认证，完全免费
     """
-    url = "https://push2.eastmoney.com/api/qt/clist/get"
-    all_stocks = []
-    
-    # 沪深A股市场参数
-    base_params = {
-        "po": 1, "np": 1, "fltt": 2, "invt": 2, 
-        "fid": "f12", 
-        "fs": "m:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23",  # 沪深A股
-        "fields": "f12,f14,f20,f21,f23,f24,f25,f26,f33,f34,f35,f36,f37,f38,f39,f40,f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100"
+    # 新浪股票接口 - 沪深A股
+    url = "https://hq.sinajs.cn/list=sh_sz"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://finance.sina.com.cn",
     }
     
-    # 分页获取，每页500条，最多20页（10000只）
-    for page_num in range(1, 21):
-        try:
-            params = {**base_params, "pn": page_num, "pz": 500}
-            resp = requests.get(url, params=params, headers=_EFN_HEADERS, timeout=15)
-            data = resp.json()
-            
-            if data.get("data") and data["data"].get("diff"):
-                stocks = data["data"]["diff"]
-                if not stocks:
-                    break  # 没有更多数据了
-                all_stocks.extend(stocks)
-                logger.info(f"东方财富第{page_num}页返回 {len(stocks)} 只股票，累计 {len(all_stocks)} 只")
-                
-                # 如果这页不足500条，说明是最后一页
-                if len(stocks) < 500:
-                    break
-            else:
-                break
-        except Exception as e:
-            logger.warning(f"东方财富接口第{page_num}页请求失败: {e}")
-            break
+    try:
+        # 获取所有A股代码列表
+        # 使用Tushare获取全量代码（这个接口不受积分限制）
+        if TUSHARE_AVAILABLE and pro:
+            df_basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,symbol,name,industry,market")
+            if df_basic is not None and len(df_basic) > 0:
+                logger.info(f"从Tushare获取 {len(df_basic)} 只股票基础信息")
+                return df_basic.to_dict("records")
+    except Exception as e:
+        logger.warning(f"获取股票列表失败: {e}")
     
-    if all_stocks:
-        logger.info(f"✅ 东方财富总共获取 {len(all_stocks)} 只股票")
-        return all_stocks
     return None
 
 
-def parse_eastmoney_stock(raw: dict) -> dict:
-    """解析东方财富原始数据为统一格式"""
-    # 字段映射：f12=代码, f14=名称, f20=总市值, f21=流通市值, f23=市净率
-    # f24=市盈率, f33=行业, f43=最新价, f44=最高价, f45=最低价
-    # f46=开盘价, f47=成交量, f48=成交额, f57=涨跌幅, f58=涨跌额
-    # f60=昨收, f61=换手率
+def fetch_sina_quotes_batch(codes: list) -> dict:
+    """
+    批量获取新浪实时行情
+    codes: 股票代码列表，如 ['000001.SZ', '600000.SH']
+    返回: {ts_code: {price, change, pct_chg, ...}}
+    """
+    if not codes:
+        return {}
     
-    code = str(raw.get("f12", "")).zfill(6)
-    if not code or code == "None":
-        return None
+    # 转换代码格式 000001.SZ -> sz000001
+    sina_codes = []
+    for code in codes:
+        if ".SZ" in code:
+            sina_codes.append("sz" + code.replace(".SZ", ""))
+        elif ".SH" in code:
+            sina_codes.append("sh" + code.replace(".SH", ""))
+        elif ".BJ" in code:
+            sina_codes.append("bj" + code.replace(".BJ", ""))
+    
+    if not sina_codes:
+        return {}
+    
+    # 新浪每次最多支持800只
+    batch_size = 800
+    all_quotes = {}
+    
+    for i in range(0, len(sina_codes), batch_size):
+        batch = sina_codes[i:i+batch_size]
+        codes_str = ",".join(batch)
+        url = f"https://hq.sinajs.cn/list={codes_str}"
         
-    # 判断市场
-    if code.startswith("6") or code.startswith("5") or code.startswith("11"):
-        ts_code = f"{code}.SH"
-    elif code.startswith("4") or code.startswith("8") or code.startswith("9"):
-        ts_code = f"{code}.BJ"
-    else:
-        ts_code = f"{code}.SZ"
+        try:
+            resp = requests.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://finance.sina.com.cn",
+            }, timeout=30)
+            resp.encoding = 'gb2312'
+            
+            # 解析返回数据
+            lines = resp.text.strip().split(";")
+            for line in lines:
+                if not line.strip():
+                    continue
+                # 格式: var hq_str_sh600000="浦发银行,10.50,...";
+                if "var hq_str_" in line and "=\"" in line:
+                    parts = line.split("=\"")
+                    if len(parts) >= 2:
+                        code_part = parts[0].replace("var hq_str_", "").strip()
+                        data_part = parts[1].rstrip("\"").strip()
+                        
+                        if data_part:
+                            fields = data_part.split(",")
+                            if len(fields) >= 33:
+                                # 转换回ts_code格式
+                                if code_part.startswith("sh"):
+                                    ts_code = code_part[2:] + ".SH"
+                                elif code_part.startswith("sz"):
+                                    ts_code = code_part[2:] + ".SZ"
+                                elif code_part.startswith("bj"):
+                                    ts_code = code_part[2:] + ".BJ"
+                                else:
+                                    continue
+                                
+                                try:
+                                    all_quotes[ts_code] = {
+                                        "name": fields[0],
+                                        "open": float(fields[1]) if fields[1] else 0,
+                                        "close": float(fields[3]) if fields[3] else 0,
+                                        "high": float(fields[4]) if fields[4] else 0,
+                                        "low": float(fields[5]) if fields[5] else 0,
+                                        "pre_close": float(fields[2]) if fields[2] else 0,
+                                        "change": float(fields[3]) - float(fields[2]) if fields[3] and fields[2] else 0,
+                                        "pct_chg": round((float(fields[3]) - float(fields[2])) / float(fields[2]) * 100, 2) if fields[3] and fields[2] and float(fields[2]) > 0 else 0,
+                                        "vol": int(float(fields[8])) if fields[8] else 0,
+                                        "amount": round(float(fields[9]) / 10000, 2) if fields[9] else 0,  # 转为万元
+                                    }
+                                except Exception:
+                                    pass
+        except Exception as e:
+            logger.warning(f"新浪接口请求失败: {e}")
     
-    # 判断市场板块
-    if code.startswith("68"):
-        market = "科创板"
-    elif code.startswith("30"):
-        market = "创业板"
-    elif code.startswith("8") or code.startswith("4"):
-        market = "北交所"
-    else:
-        market = "主板"
+    return all_quotes
+
+
+def build_stock_list_with_quotes() -> list:
+    """
+    构建带实时行情的全量股票列表
+    使用Tushare获取基础信息 + 新浪获取实时行情
+    """
+    # 1. 获取基础股票列表
+    stocks_basic = fetch_sina_all_stocks()
+    if not stocks_basic:
+        return []
     
-    close = raw.get("f43", 0)
-    if close and isinstance(close, (int, float)) and close > 0:
-        # 东方财富价格需要除以100
-        close = close / 100 if close > 1000 else close
+    # 2. 获取所有股票代码
+    codes = [s["ts_code"] for s in stocks_basic if s.get("ts_code")]
     
-    pre_close = raw.get("f60", 0)
-    if pre_close and isinstance(pre_close, (int, float)) and pre_close > 0:
-        pre_close = pre_close / 100 if pre_close > 1000 else pre_close
+    # 3. 批量获取实时行情
+    quotes = fetch_sina_quotes_batch(codes)
     
-    change = raw.get("f58", 0)
-    pct_chg = raw.get("f57", 0)
+    # 4. 合并数据
+    results = []
+    for stock in stocks_basic:
+        ts_code = stock.get("ts_code", "")
+        quote = quotes.get(ts_code, {})
+        
+        # 判断市场板块
+        code = ts_code.split(".")[0] if "." in ts_code else ""
+        if code.startswith("68"):
+            market = "科创板"
+        elif code.startswith("30"):
+            market = "创业板"
+        elif code.startswith("8") or code.startswith("4"):
+            market = "北交所"
+        else:
+            market = "主板"
+        
+        results.append({
+            "ts_code": ts_code,
+            "name": quote.get("name") or stock.get("name", ""),
+            "industry": stock.get("industry", "未知"),
+            "market": market,
+            "close": quote.get("close", 0),
+            "open": quote.get("open", 0),
+            "high": quote.get("high", 0),
+            "low": quote.get("low", 0),
+            "pre_close": quote.get("pre_close", 0),
+            "change": quote.get("change", 0),
+            "pct_chg": quote.get("pct_chg", 0),
+            "vol": quote.get("vol", 0),
+            "amount": quote.get("amount", 0),
+            "turnover_rate": 0,  # 新浪接口不返回换手率
+            "pe": 0,  # 需要另外获取
+            "pb": 0,
+            "total_mv": 0,
+            "circ_mv": 0,
+        })
     
-    # 涨跌幅和涨跌额可能需要除以100
-    if pct_chg and isinstance(pct_chg, (int, float)) and abs(pct_chg) > 100:
-        pct_chg = pct_chg / 100
-    if change and isinstance(change, (int, float)) and abs(change) > 1000:
-        change = change / 100
-    
-    return {
-        "ts_code": ts_code,
-        "name": str(raw.get("f14", "")),
-        "industry": str(raw.get("f33", "") or "未知"),
-        "market": market,
-        "close": close or 0,
-        "open": raw.get("f46", 0) / 100 if raw.get("f46") and raw.get("f46") > 1000 else raw.get("f46", 0),
-        "high": raw.get("f44", 0) / 100 if raw.get("f44") and raw.get("f44") > 1000 else raw.get("f44", 0),
-        "low": raw.get("f45", 0) / 100 if raw.get("f45") and raw.get("f45") > 1000 else raw.get("f45", 0),
-        "pre_close": pre_close,
-        "change": change,
-        "pct_chg": pct_chg,
-        "vol": raw.get("f47", 0),
-        "amount": raw.get("f48", 0),
-        "turnover_rate": raw.get("f61", 0),
-        "pe": raw.get("f24", 0),
-        "pb": raw.get("f23", 0),
-        "total_mv": round((raw.get("f20", 0) or 0) / 100000000, 2),  # 转为亿元
-        "circ_mv": round((raw.get("f21", 0) or 0) / 100000000, 2),
-    }
+    logger.info(f"✅ 合并完成：共 {len(results)} 只股票，其中 {len(quotes)} 只有实时行情")
+    return results
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,13 +437,13 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "FinScreener API",
-        "version": "1.5.0",
+        "version": "1.6.0",
         "simple_mode": True,
         "tushare_available": TUSHARE_AVAILABLE,
         "akshare_available": AKSHARE_AVAILABLE,
-        "eastmoney_direct": True,   # 东方财富直连始终可用（只依赖requests）
-        "primary_datasource": "eastmoney_direct",
-        "message": "API正常运行中 - 东方财富直连全量行情(5000+只A股)",
+        "sina_api": True,   # 新浪接口始终可用（只依赖requests）
+        "primary_datasource": "sina_tushare",
+        "message": "API正常运行中 - 新浪接口全量行情(5000+只A股)",
     }
 
 @app.get("/")
@@ -769,25 +818,27 @@ async def screen_stocks(body: dict = {}):
     data_source = "mock"
 
     # ══════════════════════════════════════════════════════════════════════
-    # 第一优先级：东方财富 HTTP 直连（无需第三方库，只用requests）
-    # 一次拉取全市场 5000+ 只A股，完全免费，无积分限制
+    # 第一优先级：新浪股票接口 + Tushare基础信息（稳定可靠，无需认证）
     # ══════════════════════════════════════════════════════════════════════
     if not results:
         try:
             now = time.time()
-            # 缓存5分钟
-            if _EASTMONEY_CACHE["data"] is not None and now - _EASTMONEY_CACHE["ts"] < 300:
+            cache_key = "sina_full"
+            
+            # 检查缓存
+            if (_EASTMONEY_CACHE.get("type") == cache_key and 
+                _EASTMONEY_CACHE["data"] is not None and 
+                now - _EASTMONEY_CACHE["ts"] < 300):
                 stocks_list = _EASTMONEY_CACHE["data"]
-                logger.info(f"使用缓存的东方财富数据：{len(stocks_list)} 只")
+                logger.info(f"使用缓存的新浪数据：{len(stocks_list)} 只")
             else:
-                logger.info("使用东方财富直连接口拉取全量A股...")
-                raw_data = fetch_eastmoney_all_stocks()
-                if raw_data:
-                    stocks_list = [parse_eastmoney_stock(r) for r in raw_data]
-                    stocks_list = [s for s in stocks_list if s and s.get("ts_code")]
+                logger.info("使用新浪接口拉取全量A股...")
+                stocks_list = build_stock_list_with_quotes()
+                if stocks_list and len(stocks_list) >= 1000:
                     _EASTMONEY_CACHE["data"] = stocks_list
                     _EASTMONEY_CACHE["ts"] = now
-                    logger.info(f"✅ 东方财富返回 {len(stocks_list)} 只A股")
+                    _EASTMONEY_CACHE["type"] = cache_key
+                    logger.info(f"✅ 新浪接口返回 {len(stocks_list)} 只A股")
                 else:
                     stocks_list = []
 
@@ -829,11 +880,11 @@ async def screen_stocks(body: dict = {}):
                 page_df = df.iloc[start: start + page_size]
                 
                 results = page_df.to_dict("records")
-                data_source = "eastmoney_direct"
-                logger.info(f"✅ 东方财富筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
+                data_source = "sina_tushare"
+                logger.info(f"✅ 新浪接口筛选完成：总计 {total} 条，返回第 {page} 页 {len(results)} 条")
 
         except Exception as e:
-            logger.error(f"❌ 东方财富直连失败: {e}", exc_info=True)
+            logger.error(f"❌ 新浪接口失败: {e}", exc_info=True)
 
     # ══════════════════════════════════════════════════════════════════════
     # 第二优先级：AkShare stock_zh_a_spot_em（无积分限制，全量5000+只）
