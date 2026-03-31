@@ -28,4 +28,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     print(f"🚀 启动FinScreener后端服务在 {args.host}:{args.port}")
-    uvicorn.run("main:app", host=args.host, port=args.port, log_level="info")
+    # 注意：这里使用 'backend.main:app' 而不是 'main:app'
+    uvicorn.run("backend.main:app", host=args.host, port=args.port, log_level="info")

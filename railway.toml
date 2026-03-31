@@ -3,9 +3,11 @@ builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 2"
+startCommand = "python start_simple.py"
 healthcheckPath = "/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 120  # 延长超时时间
+healthcheckInterval = 15
+initialDelay = 10  # 初始延迟
 
 [env]
 TUSHARE_TOKEN = "13d6c6df74675cbb76961df7cde5c08fc73ee57a61b80636fa745e96"
