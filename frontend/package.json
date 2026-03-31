@@ -24,7 +24,8 @@
     "date-fns": "^3.3.1",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.2.0",
-    "lucide-react": "^0.309.0"
+    "lucide-react": "^0.309.0",
+    "sonner": "^1.4.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
